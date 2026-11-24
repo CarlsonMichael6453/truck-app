@@ -6,12 +6,29 @@ The trucks are original meshes built in Blender and exported as glTF. They are n
 
 ## Run it
 
+On the computer:
+
 ```bash
 npm install
 npm run dev
 ```
 
-Open the URL Vite prints. The dev server is `http://127.0.0.1:47331`.
+Vite prints a local URL and a Network URL. On the same computer, open the local one: `http://127.0.0.1:47331`.
+
+### Open it on an iPhone on the same Wi-Fi
+
+The dev server listens on every network interface, port **47331**.
+
+1. Join the iPhone to the same Wi-Fi network as the computer. Guest networks and VPNs often block phone-to-computer traffic, so use the normal network.
+2. In the `npm run dev` output, copy the **Network** URL. It looks like `http://192.168.1.42:47331`.
+3. If Vite did not print one, find the computer's LAN address and build the URL yourself.
+   - macOS: `ipconfig getifaddr en0`
+   - Windows: `ipconfig` and use the IPv4 address of the Wi-Fi adapter
+   - Linux: `hostname -I`
+4. In Safari on the iPhone, open `http://<that-address>:47331`. Use `http`, not `https`.
+5. If Safari cannot connect, allow incoming connections on port 47331 in the computer's firewall, then reload.
+
+Add the page to the Home Screen from Safari's Share menu if you want it to open like an app. Progress stays in that browser.
 
 ```bash
 npm test          # economy, trail fairness, payments
@@ -20,6 +37,20 @@ npm run preview   # serve dist/ on port 47331
 ```
 
 Progress is saved in `localStorage` under `omnipresent.truck-app.v1`. The store screen can reset that save.
+
+## Open it on a phone without running a dev server
+
+GitHub Pages can host the built app. A workflow is already in `.github/workflows/pages.yml`. After this project is on GitHub as `CarlsonMichael6453/truck-app`:
+
+1. On the repo page, open **Settings → Pages**.
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+3. Open the **Actions** tab and run **Deploy GitHub Pages** once if it did not start on its own.
+
+The site address is:
+
+`https://carlsonmichael6453.github.io/truck-app/`
+
+GitHub only serves Pages from a private repository on a paid plan. On the free plan, Pages publishes from a public repository. The app has no secrets in the client bundle. If Pages refuses to publish, make the repository public or run the Wi-Fi steps above.
 
 ## How to play
 
