@@ -317,12 +317,27 @@ def build_bumper(kind: str, mats: dict | None = None) -> list[bpy.types.Object]:
         pieces.append(_cyl("PlasticLOD", (0, 0.04, 0.12), 0.05, 1.7, plastic, (0, math.pi / 2, 0), verts=8))
     elif kind == "winch":
         plate = _cube("Plastic", (0, 0.08, 0.1), (1.8, 0.28, 0.14), plastic)
-        drum = _cyl("Chrome", (0, 0.1, 0.16), 0.07, 0.32, chrome, (0, math.pi / 2, 0), verts=20)
-        fairlead = _cube("Plastic", (0, 0.08, 0.18), (0.16, 0.1, 0.03), plastic)
-        pieces.extend([plate, drum, fairlead])
-        pieces.extend(_bolts(chrome, 0.16, 0.2, [-0.62, -0.28, 0.28, 0.62]))
-        pieces.extend(_shackle(chrome, -0.55, -0.02, 0.16))
-        pieces.extend(_shackle(chrome, 0.55, -0.02, 0.16))
+        drum = _cyl("Chrome", (0, 0.1, 0.14), 0.07, 0.34, chrome, (0, math.pi / 2, 0), verts=24)
+        # Roller fairlead: four bars around an open slot, not a solid plug.
+        pieces.extend(
+            [
+                plate,
+                drum,
+                _cube("Chrome", (0, 0.13, 0.185), (0.18, 0.016, 0.02), chrome),
+                _cube("Chrome", (0, 0.03, 0.185), (0.18, 0.016, 0.02), chrome),
+                _cube("Chrome", (-0.09, 0.08, 0.185), (0.016, 0.1, 0.02), chrome),
+                _cube("Chrome", (0.09, 0.08, 0.185), (0.016, 0.1, 0.02), chrome),
+                _cyl("Chrome", (0, 0.08, 0.22), 0.008, 0.08, chrome, (math.pi / 2, 0, 0), verts=8),
+                _torus("Chrome", (0, 0.04, 0.26), 0.028, 0.007, chrome, rot=(math.pi / 2, 0, 0), major_seg=14, minor_seg=6),
+            ]
+        )
+        for side in (-1, 1):
+            pieces.append(_cube("Plastic", (side * 0.55, 0.1, 0.16), (0.14, 0.07, 0.025), plastic))
+            pieces.append(_cube("Light", (side * 0.55, 0.1, 0.178), (0.09, 0.04, 0.008), light))
+        pieces.extend(_bolts(chrome, 0.17, 0.2, [-0.7, -0.4, 0.4, 0.7]))
+        pieces.extend(_bolts(chrome, 0.17, -0.02, [-0.7, 0.7]))
+        pieces.extend(_shackle(chrome, -0.32, -0.04, 0.18))
+        pieces.extend(_shackle(chrome, 0.32, -0.04, 0.18))
         pieces.append(_cube("PlasticLOD", (0, 0.08, 0.1), (1.8, 0.28, 0.16), plastic))
     else:
         pieces.append(_cyl("Plastic", (0, 0.02, 0.22), 0.04, 1.55, plastic, (0, math.pi / 2, 0), verts=14))
