@@ -47,7 +47,7 @@ export const glassMat = new THREE.MeshPhysicalMaterial({
   metalness: 0,
   roughness: 0.03,
   transparent: true,
-  opacity: 0.2,
+  opacity: 0.14,
   clearcoat: 1,
   clearcoatRoughness: 0.02,
   envMapIntensity: 2.4,
@@ -59,7 +59,7 @@ export const glassMat = new THREE.MeshPhysicalMaterial({
 })
 
 export const interiorMat = new THREE.MeshStandardMaterial({
-  color: "#3a2418",
+  color: "#1a120e",
   roughness: 0.78,
   metalness: 0.04,
 })

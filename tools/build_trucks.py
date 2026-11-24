@@ -875,12 +875,6 @@ def build_details(spec: dict, mats: dict) -> list[bpy.types.Object]:
             mats["plastic"],
         )
         made.extend([mirror, stalk, handle, board])
-        for z in (spec["cab_rear"] + 0.08, (spec["cab_front"] + spec["cab_rear"]) * 0.55, spec["cab_front"] - 0.05):
-            seam = primitive("Plastic", "cube", mats["plastic"], size=1, location=(side * (spec["width"] * 0.39), (spec["roof"] + spec["belt"]) / 2, z))
-            seam.scale = (0.006, (spec["roof"] - spec["clearance"]) * 0.28, 0.008)
-            activate(seam)
-            bpy.ops.object.transform_apply(scale=True)
-            made.append(seam)
     if spec["intake"]:
         made.append(
             tube(
