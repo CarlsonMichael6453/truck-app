@@ -10,6 +10,15 @@ import { makeBlobTexture, makeConcreteTexture, makePosterTexture, makeWallTextur
 
 const TARGET: [number, number, number] = [0, 0.9, 0.1]
 
+function shotView(): { pos: [number, number, number]; target: [number, number, number] } | null {
+  if (typeof window === "undefined") return null
+  const view = new URLSearchParams(window.location.search).get("view")
+  if (view === "wheel") return { pos: [1.7, 0.55, 2.45], target: [0.78, 0.4, 1.7] }
+  if (view === "bumper") return { pos: [1.15, 0.5, 3.25], target: [0, 0.42, 2.4] }
+  if (view === "glass") return { pos: [1.9, 1.28, 1.05], target: [0.45, 1.25, 0.4] }
+  return null
+}
+
 function SetDressing() {
   const concrete = useMemo(() => makeConcreteTexture(), [])
   const wall = useMemo(() => makeWallTexture(), [])
@@ -88,6 +97,7 @@ function Lights() {
 }
 
 function LookControls({ active }: { active: boolean }) {
+  const shot = useMemo(() => shotView(), [])
   const reduced = useMemo(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     [],
@@ -98,19 +108,20 @@ function LookControls({ active }: { active: boolean }) {
       enablePan={false}
       enableDamping
       dampingFactor={0.08}
-      autoRotate={active && !reduced && !moved}
+      autoRotate={active && !reduced && !moved && !shot}
       autoRotateSpeed={0.55}
-      minPolarAngle={0.95}
-      maxPolarAngle={1.4}
-      minDistance={3.6}
+      minPolarAngle={shot ? 0.4 : 0.95}
+      maxPolarAngle={shot ? 1.7 : 1.4}
+      minDistance={shot ? 0.35 : 3.6}
       maxDistance={8.4}
-      target={TARGET}
+      target={shot?.target ?? TARGET}
       onStart={() => setMoved(true)}
     />
   )
 }
 
 export function GarageScene({ spec, loadout, active }: { spec: TruckSpec; loadout: Loadout; active: boolean }) {
+  const shot = useMemo(() => shotView(), [])
   const fancy = useMemo(() => {
     if (typeof window === "undefined") return true
     return !window.matchMedia("(pointer: coarse)").matches
@@ -124,14 +135,14 @@ export function GarageScene({ spec, loadout, active }: { spec: TruckSpec; loadou
       dpr={[1, 1.6]}
       shadows
       frameloop={active ? "always" : "never"}
-      camera={{ position: [4.6, 1.7, 5.5], fov: 32, near: 0.1, far: 40 }}
+      camera={{ position: shot?.pos ?? [4.6, 1.7, 5.5], fov: shot ? 28 : 32, near: 0.05, far: 40 }}
       gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
       onCreated={({ gl, camera }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping
         gl.toneMappingExposure = 1.02
         gl.shadowMap.type = THREE.PCFShadowMap
         gl.outputColorSpace = THREE.SRGBColorSpace
-        camera.lookAt(...TARGET)
+        camera.lookAt(...(shot?.target ?? TARGET))
       }}
     >
       <color attach="background" args={["#12141a"]} />

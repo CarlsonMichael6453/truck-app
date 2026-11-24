@@ -1,6 +1,7 @@
 import { useGLTF } from "@react-three/drei"
 import { useFrame } from "@react-three/fiber"
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react"
+import * as THREE from "three"
 import type { Group, Material } from "three"
 import { paintById, partById } from "../content/catalog"
 import type { TruckAnchors } from "../content/fit"
@@ -23,13 +24,32 @@ function useSpin() {
   return ref
 }
 
+const lodPoint = new THREE.Vector3()
+
 function Glb({ url, paint, rim }: { url: string; paint?: Material; rim?: Material }) {
   const { scene } = useGLTF(url)
   const cloned = useMemo(() => scene.clone(true), [scene])
+  const ref = useRef<THREE.Group>(null)
   useLayoutEffect(() => {
     if (paint) assignRoleMaterials(cloned, paint, { rim })
   }, [cloned, paint, rim])
-  return <primitive object={cloned} />
+  useFrame(({ camera }) => {
+    const group = ref.current
+    if (!group) return
+    group.getWorldPosition(lodPoint)
+    const far = camera.position.distanceTo(lodPoint) > 6.5
+    group.traverse((obj) => {
+      const mesh = obj as THREE.Mesh
+      if (!mesh.isMesh) return
+      if (mesh.userData.lod === 1) mesh.visible = far
+      else if (mesh.userData.hideWhenFar) mesh.visible = !far
+    })
+  })
+  return (
+    <group ref={ref}>
+      <primitive object={cloned} />
+    </group>
+  )
 }
 
 function slotPart<S extends Part["slot"]>(id: string, slot: S): Extract<Part, { slot: S }> | undefined {

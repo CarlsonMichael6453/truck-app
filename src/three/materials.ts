@@ -43,14 +43,37 @@ export const tubeMat = new THREE.MeshStandardMaterial({
 })
 
 export const glassMat = new THREE.MeshPhysicalMaterial({
-  color: "#b7c9d8",
-  metalness: 0.08,
-  roughness: 0.04,
+  color: "#8eacbf",
+  metalness: 0,
+  roughness: 0.03,
   transparent: true,
-  opacity: 0.42,
+  opacity: 0.2,
   clearcoat: 1,
-  clearcoatRoughness: 0.05,
-  envMapIntensity: 1.4,
+  clearcoatRoughness: 0.02,
+  envMapIntensity: 2.4,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  polygonOffset: true,
+  polygonOffsetFactor: -1,
+  polygonOffsetUnits: -1,
+})
+
+export const interiorMat = new THREE.MeshStandardMaterial({
+  color: "#3a2418",
+  roughness: 0.78,
+  metalness: 0.04,
+})
+
+export const rotorMat = new THREE.MeshStandardMaterial({
+  color: "#8d9298",
+  roughness: 0.42,
+  metalness: 0.85,
+})
+
+export const caliperMat = new THREE.MeshStandardMaterial({
+  color: "#7a2420",
+  roughness: 0.48,
+  metalness: 0.25,
 })
 
 export const lampMat = new THREE.MeshStandardMaterial({

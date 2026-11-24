@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -259,7 +260,7 @@ def palette(spec: dict) -> dict[str, bpy.types.Material]:
         "rubber": make_mat("Rubber", (0.015, 0.015, 0.016), 0.0, 0.86),
         "light": make_mat("Light", (1.0, 0.9, 0.7), 0.0, 0.2, emit=4.0),
         "tail": make_mat("Tail", (0.8, 0.02, 0.015), 0.0, 0.3, emit=2.2),
-        "interior": make_mat("Interior", (0.01, 0.012, 0.015), 0.0, 0.8),
+        "interior": make_mat("Interior", (0.16, 0.09, 0.06), 0.05, 0.72),
         "plate": make_mat("Plate", (0.86, 0.8, 0.62), 0.0, 0.45),
     }
 
@@ -539,6 +540,59 @@ def build_roof(spec: dict, mats: dict) -> bpy.types.Object:
     return loft("PaintRoof", stations, mats["paint"], 0.008)
 
 
+def cut_box(obj: bpy.types.Object, location: tuple[float, float, float], scale: tuple[float, float, float], rotation=(0.0, 0.0, 0.0)) -> None:
+    cutter = primitive("Cutter", "cube", make_mat("CutterMat", (1, 0, 0)), size=1, location=location)
+    cutter.scale = scale
+    cutter.rotation_euler = rotation
+    activate(cutter)
+    bpy.ops.object.transform_apply(rotation=True, scale=True)
+    mod = obj.modifiers.new("Window", "BOOLEAN")
+    mod.operation = "DIFFERENCE"
+    mod.solver = "EXACT"
+    mod.object = cutter
+    apply_modifiers(obj)
+    bpy.data.objects.remove(cutter, do_unlink=True)
+
+
+def cut_windows(cab: bpy.types.Object, spec: dict) -> None:
+    belt = spec["belt"]
+    roof = spec["roof"]
+    z0 = spec["cab_rear"]
+    z1 = spec["cab_front"]
+    mid_z = (z0 + z1) / 2
+    mid_y = (belt + roof) / 2 + 0.02
+    # Reach past the inner seat so the opening is a real window, not a painted pocket.
+    cut_box(cab, (0.55, mid_y, mid_z), (0.42, 0.18, 0.34))
+    cut_box(cab, (-0.55, mid_y, mid_z), (0.42, 0.18, 0.34))
+    cut_box(cab, (0.0, mid_y + 0.06, z1 - 0.02), (0.62, 0.2, 0.22), (spec["rake"] * 0.35, 0.0, 0.0))
+    cut_box(cab, (0.0, mid_y, z0 + 0.04), (0.5, 0.14, 0.16))
+
+
+def build_interior(spec: dict, mats: dict) -> list[bpy.types.Object]:
+    belt = spec["belt"]
+    z0 = spec["cab_rear"]
+    z1 = spec["cab_front"]
+    made: list[bpy.types.Object] = []
+    for z in (z0 + (z1 - z0) * 0.42, z0 + (z1 - z0) * 0.68):
+        for side in (-1, 1):
+            cushion = primitive("Interior", "uv", mats["interior"], radius=0.12, location=(side * 0.22, belt + 0.16, z), segments=12, ring_count=8)
+            cushion.scale = (1.1, 0.55, 0.85)
+            activate(cushion)
+            bpy.ops.object.transform_apply(scale=True)
+            back = primitive("Interior", "uv", mats["interior"], radius=0.11, location=(side * 0.22, belt + 0.32, z - 0.06), segments=12, ring_count=8)
+            back.scale = (1.0, 0.9, 0.45)
+            activate(back)
+            bpy.ops.object.transform_apply(scale=True)
+            made.extend([cushion, back])
+    dash = primitive("Interior", "cube", mats["interior"], size=1, location=(0, belt + 0.22, z1 - 0.22))
+    dash.scale = (0.48, 0.06, 0.1)
+    activate(dash)
+    bpy.ops.object.transform_apply(scale=True)
+    wheel = primitive("Interior", "torus", mats["interior"], major_radius=0.09, minor_radius=0.012, location=(0.28, belt + 0.34, z1 - 0.28), rotation=(math.radians(70), 0, 0))
+    made.extend([dash, wheel])
+    return made
+
+
 def glass_sheet(
     name: str,
     center: tuple[float, float, float],
@@ -563,51 +617,41 @@ def glass_sheet(
 
 
 def build_glass(spec: dict, mats: dict) -> list[bpy.types.Object]:
-    hw = spec["width"] * 0.42
-    header_y = spec["roof"] - 0.12 - spec["fastback"] * 0.35
-    cowl_y = spec["belt"] + 0.08
-    header_z = spec["cab_front"] + 0.02
-    cowl_z = spec["cab_front"] + 0.16 + spec["rake"] * 0.08
-    mid_y = (header_y + cowl_y) / 2
-    mid_z = (header_z + cowl_z) / 2
-    length = math.hypot(header_y - cowl_y, header_z - cowl_z)
-    pitch = math.atan2(cowl_z - header_z, header_y - cowl_y)
-    windshield = glass_sheet(
-        "Glass",
-        (0, mid_y, mid_z),
-        (pitch, 0, 0),
-        hw * 2 * 0.92,
-        length * 0.92,
-        mats["glass"],
-        0.02,
-    )
-    pieces = [windshield]
-    door_z = (spec["cab_front"] + spec["cab_rear"]) / 2
-    door_h = (spec["roof"] + spec["belt"]) / 2
-    door_len = (spec["cab_front"] - spec["cab_rear"]) * 0.62
-    door_height = (spec["roof"] - spec["belt"]) * 0.46
+    belt = spec["belt"]
+    roof = spec["roof"]
+    z0 = spec["cab_rear"]
+    z1 = spec["cab_front"]
+    mid_z = (z0 + z1) / 2
+    mid_y = (belt + roof) / 2 + 0.02
+    made: list[bpy.types.Object] = []
     for side in (-1, 1):
-        side_glass = glass_sheet(
+        glass = primitive(
             "Glass",
-            (side * (spec["width"] * 0.4 + 0.01), door_h, door_z),
-            (0, side * math.pi / 2, 0),
-            door_len,
-            door_height,
+            "cube",
             mats["glass"],
-            0.015,
+            size=1,
+            location=(side * 0.72, mid_y, mid_z),
         )
-        pieces.append(side_glass)
-    rear = glass_sheet(
-        "Glass",
-        (0, door_h, spec["cab_rear"] - 0.02),
-        (spec["fastback"] * 0.4, math.pi, 0),
-        hw * 1.5,
-        door_height * 0.7,
-        mats["glass"],
-        0.01,
-    )
-    pieces.append(rear)
-    return pieces
+        glass.scale = (0.01, 0.3, 0.58)
+        activate(glass)
+        bpy.ops.object.transform_apply(scale=True)
+        made.append(glass)
+        x = side * 0.735
+        made.append(primitive("Paint", "cube", mats["paint"], size=1, location=(x, mid_y + 0.16, mid_z)))
+        made.append(primitive("Paint", "cube", mats["paint"], size=1, location=(x, mid_y - 0.16, mid_z)))
+        made.append(primitive("Paint", "cube", mats["paint"], size=1, location=(x, mid_y, mid_z + 0.3)))
+        made.append(primitive("Paint", "cube", mats["paint"], size=1, location=(x, mid_y, mid_z - 0.3)))
+        for piece, scale in zip(made[-4:], ((0.012, 0.02, 0.64), (0.012, 0.02, 0.64), (0.012, 0.32, 0.02), (0.012, 0.32, 0.02))):
+            piece.scale = scale
+            activate(piece)
+            bpy.ops.object.transform_apply(scale=True)
+    windshield = primitive("Glass", "cube", mats["glass"], size=1, location=(0, mid_y + 0.05, z1 + 0.015))
+    windshield.scale = (1.02, 0.3, 0.01)
+    windshield.rotation_euler = (spec["rake"] * 0.2, 0, 0)
+    activate(windshield)
+    bpy.ops.object.transform_apply(rotation=True, scale=True)
+    made.append(windshield)
+    return made
 
 
 def build_pillars(spec: dict, mats: dict) -> list[bpy.types.Object]:
@@ -858,28 +902,19 @@ def build_details(spec: dict, mats: dict) -> list[bpy.types.Object]:
         3,
     )
     made.append(antenna)
-    # dark cabin so the glass reads as a window
-    cabin = primitive(
-        "Interior",
-        "cube",
-        mats["interior"],
-        size=1,
-        location=(0, (spec["roof"] + spec["belt"]) / 2, (spec["cab_front"] + spec["cab_rear"]) / 2),
-    )
-    cabin.scale = (spec["width"] * 0.36, (spec["roof"] - spec["belt"]) * 0.32, (spec["cab_front"] - spec["cab_rear"]) * 0.32)
-    activate(cabin)
-    bpy.ops.object.transform_apply(scale=True)
-    made.append(cabin)
+    made.extend(build_interior(spec, mats))
     return made
 
 
 def build_truck(spec: dict) -> tuple[list[bpy.types.Object], dict]:
     mats = palette(spec)
     front, rear, front_z, rear_z = axles(spec)
+    cab = build_cab(spec, mats)
+    cut_windows(cab, spec)
     objects: list[bpy.types.Object] = [
         build_body(spec, mats),
         build_hood(spec, mats),
-        build_cab(spec, mats),
+        cab,
         build_roof(spec, mats),
         *build_glass(spec, mats),
         *build_bed(spec, mats),
@@ -1247,18 +1282,20 @@ TIRES = [
 ]
 
 
+def _as_list(obj):
+    return obj if isinstance(obj, list) else [obj]
+
+
 def export_parts() -> None:
     mats = part_mats()
     for style in RIMS:
         reset_scene()
         mats = part_mats()
-        obj = build_rim(style, mats)
-        export_glb([obj], MODEL_ROOT / "parts" / f"{style['id']}.glb")
+        export_glb(_as_list(build_rim(style, mats)), MODEL_ROOT / "parts" / f"{style['id']}.glb")
     for style in TIRES:
         reset_scene()
         mats = part_mats()
-        obj = build_tire(style, mats)
-        export_glb([obj], MODEL_ROOT / "parts" / f"{style['id']}.glb")
+        export_glb(_as_list(build_tire(style, mats)), MODEL_ROOT / "parts" / f"{style['id']}.glb")
     for kind, builder in (
         ("bp-factory", lambda m: build_bumper("factory", m)),
         ("bp-tube", lambda m: build_bumper("tube", m)),
@@ -1275,8 +1312,7 @@ def export_parts() -> None:
     ):
         reset_scene()
         mats = part_mats()
-        obj = builder(mats)
-        export_glb([obj], MODEL_ROOT / "parts" / f"{kind}.glb")
+        export_glb(_as_list(builder(mats)), MODEL_ROOT / "parts" / f"{kind}.glb")
 
 
 def export_trucks(only: str | None) -> None:
@@ -1286,16 +1322,13 @@ def export_trucks(only: str | None) -> None:
             continue
         reset_scene()
         objects, meta = build_truck(spec)
-        preview = preview_wheels(spec, palette(spec))
-        studio_lights()
-        for obj in bpy.context.scene.objects:
-            if obj.type == "MESH":
-                print(f"mesh {obj.name} verts={len(obj.data.vertices)} faces={len(obj.data.polygons)} loc={tuple(round(v,2) for v in obj.location)}")
-        render_still(PREVIEW_DIR / f"{spec['id']}-three-quarter.png", "34")
-        render_still(PREVIEW_DIR / f"{spec['id']}-side.png", "side")
-        for obj in preview:
-            bpy.data.objects.remove(obj, do_unlink=True)
-        # camera and lights and ground should not export
+        if os.environ.get("SKIP_PREVIEW") != "1":
+            preview = preview_wheels(spec, palette(spec))
+            studio_lights()
+            render_still(PREVIEW_DIR / f"{spec['id']}-three-quarter.png", "34")
+            render_still(PREVIEW_DIR / f"{spec['id']}-side.png", "side")
+            for obj in preview:
+                bpy.data.objects.remove(obj, do_unlink=True)
         exportable = [obj for obj in objects if obj.name in bpy.data.objects]
         export_glb(exportable, MODEL_ROOT / "trucks" / f"{spec['id']}.glb")
         manifest[spec["id"]] = meta
@@ -1306,6 +1339,23 @@ def export_trucks(only: str | None) -> None:
         existing.update(manifest)
         ANCHOR_PATH.write_text(json.dumps(existing, indent=2))
         print(f"wrote {ANCHOR_PATH}")
+
+
+def _bind_hero() -> None:
+    import importlib.util
+
+    path = Path(__file__).with_name("hero_parts.py")
+    spec = importlib.util.spec_from_file_location("hero_parts", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    globals()["build_rim"] = module.build_rim
+    globals()["build_tire"] = module.build_tire
+    globals()["build_bumper"] = module.build_bumper
+
+
+_bind_hero()
 
 
 def main() -> None:
