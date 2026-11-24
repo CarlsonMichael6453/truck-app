@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Oswald", ui-sans-serif, sans-serif;
+  --font-sans: "Figtree", ui-sans-serif, sans-serif;
+  --color-ink: #0c0e12;
+  --color-panel: #161a21;
+  --color-panel-2: #222833;
+  --color-cream: #f3efe6;
+  --color-muted: #b7b0a4;
+  --color-copper: #ff8a3d;
+  --color-copper-2: #ffb088;
+  --color-good: #b6e38a;
+  --color-danger: #ff6b6b;
+}
+
+html {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ink);
+  color: var(--color-cream);
+  font-family: var(--font-sans);
+  overscroll-behavior: none;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes sheen {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 220% 50%;
+  }
+}
+
+.legend-sheen {
+  background-image: linear-gradient(110deg, transparent 30%, rgba(242, 197, 110, 0.32) 50%, transparent 70%);
+  background-size: 220% 100%;
+  animation: sheen 3.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .legend-sheen {
+    animation: none;
+  }
+}

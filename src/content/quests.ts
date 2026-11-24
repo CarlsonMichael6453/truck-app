@@ -1,0 +1,81 @@
+import type { DailyReward, Quest } from "./types"
+
+export const QUESTS: Quest[] = [
+  {
+    id: "shake",
+    title: "Shake-down",
+    detail: "Take any trail far enough to count, or finish it.",
+    metric: "runs",
+    goal: 1,
+    rewardCoins: 400,
+  },
+  {
+    id: "regular",
+    title: "Three trips",
+    detail: "Log three runs that make it past the trailhead.",
+    metric: "runs",
+    goal: 3,
+    rewardCoins: 500,
+  },
+  {
+    id: "unmarked",
+    title: "Unmarked",
+    detail: "Finish a trail without taking a hit.",
+    metric: "clean",
+    goal: 1,
+    rewardPartId: "ex-side",
+    duplicateCoins: 900,
+  },
+  {
+    id: "pocket",
+    title: "Full pockets",
+    detail: "Bank 500 coins in a single run.",
+    metric: "bestCoins",
+    goal: 500,
+    rewardCoins: 350,
+  },
+  {
+    id: "haul",
+    title: "Long haul",
+    detail: "Cover 800 meters in one run.",
+    metric: "bestDistance",
+    goal: 800,
+    rewardPartId: "lt-bar",
+    duplicateCoins: 800,
+  },
+  {
+    id: "mod",
+    title: "First mod",
+    detail: "Buy any part with coins or Cores.",
+    metric: "parts",
+    goal: 1,
+    rewardCoins: 250,
+  },
+  {
+    id: "bay",
+    title: "Regular at the bay",
+    detail: "Claim the daily bay two different days.",
+    metric: "dailies",
+    goal: 2,
+    rewardCoins: 600,
+  },
+  {
+    id: "gulch",
+    title: "Gulch scout",
+    detail: "Finish Gulch.",
+    metric: "gulch",
+    goal: 1,
+    rewardPartId: "ti-mud",
+    duplicateCoins: 800,
+  },
+]
+
+export const DAILY_REWARDS: DailyReward[] = [
+  { label: "Morning shift", coins: 200 },
+  { label: "Second cup", coins: 300 },
+  { label: "Overtime", coins: 450 },
+  { label: "Deep Lip, or coins if you have it", partId: "wh-deep", duplicateCoins: 800 },
+  { label: "Friday bay", coins: 500 },
+  { label: "Long shift", coins: 700 },
+  { label: "Tube Guard, or coins if you have it", partId: "bp-tube", duplicateCoins: 1000 },
+]
