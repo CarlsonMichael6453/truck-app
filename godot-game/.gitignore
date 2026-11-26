@@ -1,0 +1,13 @@
+.godot/
+build/
+export/
+*.translation
+*.tmp
+*.keystore
+*.jks
+*.mobileprovision
+*.p12
+*.pem
+*.keystore.cfg
+android/build/
+ios/build/
