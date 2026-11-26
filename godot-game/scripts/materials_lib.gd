@@ -105,14 +105,26 @@ static func emissive(color: Color, energy: float) -> StandardMaterial3D:
 	return mat
 
 
+static func compatibility_renderer() -> bool:
+	return RenderingServer.get_current_rendering_method() == "gl_compatibility"
+
+
 static func _pbr(color: Color, metal: float, rough: float, coat: float, coat_rough: float) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(color.r, color.g, color.b, 1.0)
 	mat.metallic = metal
 	mat.roughness = rough
 	mat.specular_mode = BaseMaterial3D.SPECULAR_SCHLICK_GGX
-	if coat > 0.02:
+	if coat > 0.02 and not compatibility_renderer():
 		mat.clearcoat_enabled = true
 		mat.clearcoat = coat
 		mat.clearcoat_roughness = coat_rough
+	elif coat > 0.02:
+		# Compatibility has no clearcoat lobe. A tighter roughness and a short
+		# rim keep gloss, metallic, and satin from going flat on the web build.
+		mat.roughness = clampf(rough * (1.0 - 0.28 * coat), 0.05, 0.95)
+		mat.metallic_specular = clampf(0.5 + coat * (0.35 if metal >= 0.5 else 0.16), 0.0, 1.0)
+		mat.rim_enabled = true
+		mat.rim = clampf(0.08 + coat * 0.22, 0.0, 0.32)
+		mat.rim_tint = 0.22
 	return mat

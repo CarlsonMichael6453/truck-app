@@ -34,6 +34,12 @@ export function Shell() {
           <div>
             <p className="font-display text-2xl leading-none tracking-wide">TRUCK APP</p>
             <p className="text-[11px] uppercase tracking-[0.18em] text-muted">Omnipresent Games</p>
+            <a
+              href={`${import.meta.env.BASE_URL}godot/`}
+              className="mt-1 inline-flex min-h-8 items-center text-[11px] font-semibold uppercase tracking-[0.16em] text-copper"
+            >
+              Godot game
+            </a>
           </div>
           <div className="flex items-center gap-2 text-sm">
             <span className="rounded-full bg-panel px-3 py-1 font-semibold text-copper">{formatCount(coins)}</span>

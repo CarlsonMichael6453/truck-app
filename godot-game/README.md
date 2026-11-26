@@ -82,14 +82,20 @@ Android:
 2. **Project → Export → Android**. Arm64 only. Debug export runs without a release keystore.
 3. For a Play upload, create a keystore on your machine, set it in the preset locally, and keep the file out of git. The `.gitignore` already ignores `*.keystore` and `*.jks`.
 
-A web preview is possible and does not touch the Vite GitHub Pages site. Godot's web export cannot run the Mobile renderer, so the project setting `rendering/renderer/rendering_method.web` is Compatibility. Clearcoat is thinner there. The phone build is the one that matches these screenshots.
+The GitHub Pages workflow exports this project and publishes it next to the Vite app:
+
+`https://carlsonmichael6453.github.io/truck-app/godot/`
+
+Godot's web export cannot run the Mobile renderer, so `rendering/renderer/rendering_method.web` is Compatibility. The Web preset in `export_presets.cfg` sets `variant/thread_support=false` (no COOP/COEP headers, which GitHub Pages cannot send, and which iOS Safari needs for threads). `html/canvas_resize_policy` is Adaptive, and `web/shell.html` keeps the canvas full-screen, blocks page pinch-zoom, and caps `devicePixelRatio` at 2 so an iPhone does not allocate a 3x buffer. Textures stay uncompressed: S3TC does not work in iOS Safari.
+
+Compatibility has no clearcoat and no glow. On that renderer the bay raises the studio exposure and ambient, and paint uses a tighter roughness plus a short rim so the finish still reads. The phone build is unchanged and is the one that matches the Mobile screenshots.
 
 ```bash
 mkdir -p godot-game/build/web
 godot --headless --path godot-game --export-release Web godot-game/build/web/index.html
 ```
 
-`godot-game/build/` is gitignored. The Pages workflow still publishes the Vite `dist/` only.
+`godot-game/build/` is gitignored. A local server has to serve the folder as a directory so `index.wasm` and `index.pck` sit beside `index.html`. The shell adds a `<base>` for that directory, including when the URL has no trailing slash.
 
 ## Performance
 

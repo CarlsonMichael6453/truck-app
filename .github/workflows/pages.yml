@@ -26,6 +26,66 @@ jobs:
       - run: npm ci
       # Pages serves this repo at /truck-app/; override the relative Vite base.
       - run: npm run build -- --base=/truck-app/
+
+      - name: Cache Godot 4.5.2
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/godot-4.5.2
+          key: godot-4.5.2-stable-linux-x86_64-templates-v1
+
+      - name: Download Godot 4.5.2 and export templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          GODOT_ROOT="${{ runner.tool_cache }}/godot-4.5.2"
+          mkdir -p "$GODOT_ROOT/bin"
+          curl -fL --retry 5 --retry-delay 2 -o /tmp/godot.zip \
+            https://github.com/godotengine/godot/releases/download/4.5.2-stable/Godot_v4.5.2-stable_linux.x86_64.zip
+          unzip -o /tmp/godot.zip -d "$GODOT_ROOT/bin"
+          chmod +x "$GODOT_ROOT/bin/Godot_v4.5.2-stable_linux.x86_64"
+          curl -fL --retry 5 --retry-delay 2 -o /tmp/godot-templates.tpz \
+            https://github.com/godotengine/godot/releases/download/4.5.2-stable/Godot_v4.5.2-stable_export_templates.tpz
+          rm -rf /tmp/godot-templates
+          unzip -q /tmp/godot-templates.tpz -d /tmp/godot-templates
+          rm -rf "$GODOT_ROOT/templates"
+          mv /tmp/godot-templates/templates "$GODOT_ROOT/templates"
+          test -f "$GODOT_ROOT/templates/web_nothreads_release.zip"
+          rm -f /tmp/godot.zip /tmp/godot-templates.tpz
+
+      - name: Install Godot export templates
+        run: |
+          set -euo pipefail
+          DEST="$HOME/.local/share/godot/export_templates/4.5.2.stable"
+          mkdir -p "$(dirname "$DEST")"
+          rm -rf "$DEST"
+          ln -s "${{ runner.tool_cache }}/godot-4.5.2/templates" "$DEST"
+          test -f "$DEST/web_nothreads_release.zip"
+          test -x "${{ runner.tool_cache }}/godot-4.5.2/bin/Godot_v4.5.2-stable_linux.x86_64"
+
+      - name: Export Godot web build
+        run: |
+          set -euo pipefail
+          GODOT="${{ runner.tool_cache }}/godot-4.5.2/bin/Godot_v4.5.2-stable_linux.x86_64"
+          "$GODOT" --headless --path godot-game --import
+          mkdir -p dist/godot
+          "$GODOT" --headless --path godot-game --export-release "Web" "$PWD/dist/godot/index.html"
+          test -s dist/godot/index.html
+          test -s dist/godot/index.js
+          test -s dist/godot/index.wasm
+          test -s dist/godot/index.pck
+          python3 - << 'PY'
+          import pathlib, re
+          html = pathlib.Path("dist/godot/index.html").read_text()
+          assert "GODOT_THREADS_ENABLED = false" in html, "web export must ship with threads off"
+          assert re.search(r'"executable"\s*:\s*"index"', html), "executable name should stay relative"
+          assert '"/index.pck"' not in html and '"/index.wasm"' not in html
+          assert "index.pck" in html and "index.wasm" in html
+          wasm = pathlib.Path("dist/godot/index.wasm").stat().st_size
+          pck = pathlib.Path("dist/godot/index.pck").stat().st_size
+          print(f"web export ok wasm={wasm} pck={pck}")
+          PY
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
