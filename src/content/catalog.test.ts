@@ -37,6 +37,15 @@ describe("catalog", () => {
     for (const truck of TRUCKS) expect(paintById(truck.paint)).toBeTruthy()
   })
 
+  it("sells the sleek rims for coins in the wheel slot", () => {
+    for (const id of ["wh-aero", "wh-blade", "wh-split", "wh-mono"]) {
+      const part = partById(id)
+      expect(part?.slot).toBe("wheel")
+      expect(part?.coins).toBeGreaterThan(0)
+      expect(part?.cores).toBeGreaterThan(0)
+    }
+  })
+
   it("uses two distinct tracks", () => {
     expect(TRACKS.map((track) => track.id)).toEqual(["switchback", "gulch"])
   })
