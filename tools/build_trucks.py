@@ -1266,6 +1266,10 @@ RIMS = [
     {"id": "wh-bead", "name": "wh-bead", "spokes": 6, "radius": 0.014, "lip": 0.25, "beadlock": True, "turbine": False},
     {"id": "wh-mesh", "name": "wh-mesh", "spokes": 12, "radius": 0.007, "lip": 0.45, "beadlock": False, "turbine": False},
     {"id": "wh-turbine", "name": "wh-turbine", "spokes": 7, "radius": 0.014, "lip": 0.7, "beadlock": False, "turbine": True},
+    {"id": "wh-aero", "name": "wh-aero", "spokes": 14, "radius": 0.005, "lip": 0.4, "beadlock": False, "turbine": False},
+    {"id": "wh-blade", "name": "wh-blade", "spokes": 9, "radius": 0.012, "lip": 0.55, "beadlock": False, "turbine": True},
+    {"id": "wh-split", "name": "wh-split", "spokes": 5, "radius": 0.014, "lip": 1.05, "beadlock": False, "turbine": False},
+    {"id": "wh-mono", "name": "wh-mono", "spokes": 5, "radius": 0.02, "lip": 0.35, "beadlock": False, "turbine": False},
 ]
 
 TIRES = [
@@ -1280,13 +1284,31 @@ def _as_list(obj):
     return obj if isinstance(obj, list) else [obj]
 
 
-def export_parts() -> None:
-    mats = part_mats()
+def _part_ids(only: str | None) -> set[str] | None:
+    """None exports every part. A set exports those ids. An empty set is not a part run."""
+    if only in (None, "parts"):
+        return None
+    if not only:
+        return set()
+    pieces = [piece for piece in only.split(",") if piece]
+    if pieces and all(piece.startswith(("wh-", "ti-", "bp-", "lt-", "ex-", "sp-")) for piece in pieces):
+        return set(pieces)
+    return set()
+
+
+def export_parts(only_ids: set[str] | None = None) -> None:
+    def want(part_id: str) -> bool:
+        return only_ids is None or part_id in only_ids
+
     for style in RIMS:
+        if not want(style["id"]):
+            continue
         reset_scene()
         mats = part_mats()
         export_glb(_as_list(build_rim(style, mats)), MODEL_ROOT / "parts" / f"{style['id']}.glb")
     for style in TIRES:
+        if not want(style["id"]):
+            continue
         reset_scene()
         mats = part_mats()
         export_glb(_as_list(build_tire(style, mats)), MODEL_ROOT / "parts" / f"{style['id']}.glb")
@@ -1304,6 +1326,8 @@ def export_parts() -> None:
         ("sp-lip", lambda m: build_spoiler("lip", m)),
         ("sp-wing", lambda m: build_spoiler("wing", m)),
     ):
+        if not want(kind):
+            continue
         reset_scene()
         mats = part_mats()
         export_glb(_as_list(builder(mats)), MODEL_ROOT / "parts" / f"{kind}.glb")
@@ -1354,12 +1378,13 @@ _bind_hero()
 
 def main() -> None:
     only = argv_filter()
+    part_ids = _part_ids(only)
     MODEL_ROOT.joinpath("trucks").mkdir(parents=True, exist_ok=True)
     MODEL_ROOT.joinpath("parts").mkdir(parents=True, exist_ok=True)
     PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
-    if only in (None, "parts"):
-        export_parts()
-    if only != "parts":
+    if only in (None, "parts") or part_ids:
+        export_parts(part_ids)
+    if only is None or (only != "parts" and not part_ids):
         export_trucks(None if only in (None, "trucks") else only)
 
 

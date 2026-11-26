@@ -76,7 +76,7 @@ Names, badges, and grilles are invented. Do not swap in a real manufacturer's na
 Working on this device:
 
 - 3D garage with clearcoat paint, chrome, rubber, glass, shadows, and an image-based studio environment
-- 32 parts across wheels, tires, lift, bumpers, lights, exhaust, spoilers, and wraps, with common / rare / epic / legendary tiers
+- 36 parts across wheels, tires, lift, bumpers, lights, exhaust, spoilers, and wraps, with common / rare / epic / legendary tiers
 - Trail runs, quests, and a daily reward
 - Local save of the garage, currencies, and receipts
 

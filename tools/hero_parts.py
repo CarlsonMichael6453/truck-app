@@ -108,6 +108,253 @@ def _lugs(mat, x: float, radius: float, count: int, nut_r: float = 0.012) -> lis
     return made
 
 
+def _tube(name: str, loc, radius: float, depth: float, mat, rot=(0.0, math.pi / 2, 0.0), verts: int = 24) -> bpy.types.Object:
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=verts,
+        radius=radius,
+        depth=depth,
+        end_fill_type="NOTHING",
+        location=loc,
+        rotation=rot,
+    )
+    obj = bpy.context.active_object
+    obj.name = name
+    _assign(obj, mat)
+    _smooth(obj)
+    return obj
+
+
+def _mesh_object(name: str, bm: bmesh.types.BMesh, mat: bpy.types.Material) -> bpy.types.Object:
+    bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.materials.append(mat)
+    obj = bpy.data.objects.new(name, mesh)
+    _link(obj)
+    _smooth(obj)
+    return obj
+
+
+def _tapered_spoke(
+    name: str,
+    ang: float,
+    inner: float,
+    outer: float,
+    inner_w: float,
+    outer_w: float,
+    thick: float,
+    mat,
+    sweep: float = 0.0,
+    x_inner: float = 0.04,
+    x_outer: float = 0.04,
+) -> bpy.types.Object:
+    """Spoke in the YZ wheel plane. sweep leans the outer end around the axle."""
+
+    def ring(radius: float, width: float, extra: float, px: float) -> list[tuple[float, float, float]]:
+        a = ang + extra
+        cy = math.cos(a) * radius
+        cz = math.sin(a) * radius
+        ty = -math.sin(a)
+        tz = math.cos(a)
+        hw = width * 0.5
+        ht = thick * 0.5
+        return [
+            (px - ht, cy + ty * hw, cz + tz * hw),
+            (px + ht, cy + ty * hw, cz + tz * hw),
+            (px + ht, cy - ty * hw, cz - tz * hw),
+            (px - ht, cy - ty * hw, cz - tz * hw),
+        ]
+
+    bm = bmesh.new()
+    verts = [bm.verts.new(co) for co in ring(inner, inner_w, 0.0, x_inner) + ring(outer, outer_w, sweep, x_outer)]
+    for face in (
+        (0, 1, 2, 3),
+        (4, 7, 6, 5),
+        (0, 4, 5, 1),
+        (1, 5, 6, 2),
+        (2, 6, 7, 3),
+        (3, 7, 4, 0),
+    ):
+        bm.faces.new([verts[i] for i in face])
+    return _mesh_object(name, bm, mat)
+
+
+def _join_roles(pieces: list[bpy.types.Object]) -> list[bpy.types.Object]:
+    """One mesh per material role so a phone draws a handful of calls, not forty."""
+
+    def role(obj: bpy.types.Object) -> str:
+        if obj.name.startswith("ChromeLOD"):
+            return "ChromeLOD"
+        if obj.name.startswith("Rotor"):
+            return "Rotor"
+        if obj.name.startswith("Caliper"):
+            return "Caliper"
+        return "Chrome"
+
+    groups: dict[str, list[bpy.types.Object]] = {}
+    for obj in pieces:
+        groups.setdefault(role(obj), []).append(obj)
+    if bpy.context.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    joined: list[bpy.types.Object] = []
+    for name, objs in groups.items():
+        bpy.ops.object.select_all(action="DESELECT")
+        for obj in objs:
+            obj.select_set(True)
+        bpy.context.view_layer.objects.active = objs[0]
+        if len(objs) > 1:
+            bpy.ops.object.join()
+        objs[0].name = name
+        joined.append(objs[0])
+    return joined
+
+
+def _hardware(chrome, face_x: float, lug_count: int = 5) -> list[bpy.types.Object]:
+    return [
+        _cyl("Chrome", (0.02, 0, 0), 0.046, 0.028, chrome, verts=16),
+        _cyl("Chrome", (face_x + 0.012, 0, 0), 0.034, 0.012, chrome, verts=18),
+        *_lugs(chrome, face_x + 0.006, 0.058, lug_count),
+        *_rotor_and_caliper(face_x),
+    ]
+
+
+def _coarse_lod(chrome, face_x: float, outer: float, spokes: int = 5, twist: float = 0.0) -> list[bpy.types.Object]:
+    lod = [
+        _tube("ChromeLOD", (0.0, 0, 0), 0.15, 0.1, chrome, verts=10),
+        _torus("ChromeLOD", (face_x, 0, 0), outer, 0.012, chrome, major_seg=10, minor_seg=4),
+    ]
+    for i in range(spokes):
+        ang = (i / spokes) * math.pi * 2
+        lod.append(_spoke("ChromeLOD", ang, 0.05, outer - 0.02, 0.018, 0.01, chrome, twist, face_x))
+    return lod
+
+
+def _build_sleek_rim(style: dict) -> list[bpy.types.Object]:
+    """Four forged faces. Same axle, lip, lugs, cap, and visible caliper as the other rims."""
+    chrome = _mat("Chrome", (0.78, 0.82, 0.86), 1.0, 0.16)
+    kind = style["id"]
+    lip = style["lip"]
+    outer = 0.228 + lip * 0.012
+    face_x = 0.05 + lip * 0.012
+    pieces: list[bpy.types.Object] = [
+        _tube("Chrome", (0.0, 0, 0), 0.142, 0.11, chrome, verts=24),
+        _torus("Chrome", (face_x, 0, 0), outer, 0.011 + lip * 0.003, chrome, major_seg=28, minor_seg=6),
+    ]
+    if kind == "wh-aero":
+        # Thin radial wires plus a second set and two hoops, so the face reads as mesh.
+        count = 14
+        for i in range(count):
+            ang = (i / count) * math.pi * 2
+            pieces.append(_tapered_spoke("Chrome", ang, 0.062, outer - 0.012, 0.0045, 0.0055, 0.004, chrome, x_inner=face_x - 0.004, x_outer=face_x - 0.002))
+            pieces.append(
+                _tapered_spoke(
+                    "Chrome",
+                    ang + math.pi / count,
+                    0.11,
+                    outer - 0.016,
+                    0.004,
+                    0.0045,
+                    0.0035,
+                    chrome,
+                    x_inner=face_x - 0.001,
+                    x_outer=face_x + 0.001,
+                )
+            )
+        pieces.append(_torus("Chrome", (face_x - 0.002, 0, 0), 0.118, 0.0032, chrome, major_seg=24, minor_seg=4))
+        pieces.append(_torus("Chrome", (face_x, 0, 0), outer - 0.02, 0.003, chrome, major_seg=28, minor_seg=4))
+        pieces.extend(_hardware(chrome, face_x, 5))
+        pieces.extend(_coarse_lod(chrome, face_x, outer, 6))
+    elif kind == "wh-blade":
+        # Every blade leans the same way, narrow at the hub and wide at the lip.
+        count = 9
+        sweep = 0.95
+        for i in range(count):
+            ang = (i / count) * math.pi * 2
+            pieces.append(
+                _tapered_spoke(
+                    "Chrome",
+                    ang,
+                    0.048,
+                    0.14,
+                    0.012,
+                    0.024,
+                    0.008,
+                    chrome,
+                    sweep=sweep * 0.4,
+                    x_inner=face_x - 0.012,
+                    x_outer=face_x - 0.002,
+                )
+            )
+            pieces.append(
+                _tapered_spoke(
+                    "Chrome",
+                    ang + sweep * 0.35,
+                    0.1,
+                    outer - 0.012,
+                    0.02,
+                    0.046,
+                    0.008,
+                    chrome,
+                    sweep=sweep * 0.55,
+                    x_inner=face_x - 0.006,
+                    x_outer=face_x + 0.006,
+                )
+            )
+        pieces.extend(_hardware(chrome, face_x, 5))
+        pieces.extend(_coarse_lod(chrome, face_x, outer, 5, 0.35))
+    elif kind == "wh-split":
+        # Deep barrel with a Y spoke: one root, two tips, sitting at the back of the dish.
+        dish_x = 0.028
+        mouth_x = face_x + 0.03
+        pieces.append(_tube("Chrome", ((dish_x + mouth_x) * 0.5, 0, 0), outer + 0.004, mouth_x - dish_x, chrome, verts=32))
+        pieces.append(_torus("Chrome", (mouth_x, 0, 0), outer + 0.006, 0.009, chrome, major_seg=28, minor_seg=6))
+        count = 5
+        for i in range(count):
+            ang = (i / count) * math.pi * 2 - 0.2
+            pieces.append(_tapered_spoke("Chrome", ang, 0.048, 0.145, 0.022, 0.04, 0.012, chrome, x_inner=dish_x, x_outer=dish_x + 0.006))
+            for side in (-1, 1):
+                pieces.append(
+                    _tapered_spoke(
+                        "Chrome",
+                        ang + side * 0.05,
+                        0.128,
+                        outer - 0.018,
+                        0.016,
+                        0.02,
+                        0.01,
+                        chrome,
+                        sweep=side * 0.28,
+                        x_inner=dish_x + 0.004,
+                        x_outer=dish_x + 0.012,
+                    )
+                )
+        pieces.extend(_hardware(chrome, dish_x + 0.01, 5))
+        pieces.extend(_coarse_lod(chrome, mouth_x - 0.01, outer, 5))
+    else:
+        # Concave monoblock: five broad faces, narrow slots the caliper shows through.
+        count = 5
+        for i in range(count):
+            ang = (i / count) * math.pi * 2
+            pieces.append(
+                _tapered_spoke(
+                    "Chrome",
+                    ang,
+                    0.04,
+                    outer - 0.012,
+                    0.022,
+                    0.245,
+                    0.01,
+                    chrome,
+                    x_inner=face_x - 0.036,
+                    x_outer=face_x + 0.02,
+                )
+            )
+        pieces.extend(_hardware(chrome, face_x + 0.006, 5))
+        pieces.extend(_coarse_lod(chrome, face_x, outer, 5))
+    return _join_roles(pieces)
+
+
 def _rotor_and_caliper(chrome_x: float) -> list[bpy.types.Object]:
     rotor_mat = _mat("Rotor", (0.55, 0.56, 0.58), 0.85, 0.38)
     caliper_mat = _mat("Caliper", (0.45, 0.08, 0.07), 0.25, 0.45)
@@ -122,6 +369,8 @@ def _rotor_and_caliper(chrome_x: float) -> list[bpy.types.Object]:
 
 
 def build_rim(style: dict, mats: dict | None = None) -> list[bpy.types.Object]:
+    if style["id"] in {"wh-aero", "wh-blade", "wh-split", "wh-mono"}:
+        return _build_sleek_rim(style)
     chrome = _mat("Chrome", (0.78, 0.82, 0.86), 1.0, 0.16)
     spokes = style["spokes"]
     lip = style["lip"]
