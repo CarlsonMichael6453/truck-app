@@ -17,6 +17,7 @@ var _spin := true
 var _hold := 0.0
 var _active := true
 var _touches := {}
+var _touch_block_until := 0
 
 
 func _ready() -> void:
@@ -57,9 +58,12 @@ func handle(event: InputEvent) -> void:
 			_hold = 1.3
 		else:
 			_touches.erase(event.index)
+		# The browser also emits a pointermove for the same finger. Orbit once.
+		_touch_block_until = Time.get_ticks_msec() + 120
 	elif event is InputEventScreenDrag:
 		if not _touches.has(event.index):
-			return
+			_touches[event.index] = event.position
+		_touch_block_until = Time.get_ticks_msec() + 120
 		if _touches.size() >= 2:
 			var before := _span()
 			_touches[event.index] = event.position
@@ -74,6 +78,8 @@ func handle(event: InputEvent) -> void:
 		_hold = 1.3
 		_apply_camera()
 	elif event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+		if OS.has_feature("web") and (not _touches.is_empty() or Time.get_ticks_msec() < _touch_block_until):
+			return
 		yaw -= event.relative.x * 0.006
 		pitch = clampf(pitch - event.relative.y * 0.0035, 0.08, 0.68)
 		_hold = 1.3
@@ -117,11 +123,14 @@ func _build_room() -> void:
 	env.background_mode = Environment.BG_SKY
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	var compat := MaterialsLib.compatibility_renderer()
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_exposure = 0.86
-	env.ambient_light_energy = 0.36
-	env.background_energy_multiplier = 0.42
-	env.glow_enabled = true
+	# Compatibility is LDR and has no glow or clearcoat. Lift the studio so the
+	# paint still has a highlight and chrome has something to reflect.
+	env.tonemap_exposure = 1.08 if compat else 0.86
+	env.ambient_light_energy = 0.78 if compat else 0.36
+	env.background_energy_multiplier = 0.72 if compat else 0.42
+	env.glow_enabled = not compat
 	env.glow_intensity = 0.22
 	env.glow_strength = 0.42
 	env.glow_bloom = 0.05
@@ -129,14 +138,14 @@ func _build_room() -> void:
 	env.ssr_enabled = false
 	env.ssao_enabled = false
 	env.adjustment_enabled = true
-	env.adjustment_contrast = 1.05
-	env.adjustment_saturation = 1.06
+	env.adjustment_contrast = 1.08 if compat else 1.05
+	env.adjustment_saturation = 1.08 if compat else 1.06
 	var sky := Sky.new()
 	var hdr := load("res://environment/studio.hdr")
 	if hdr is Texture2D:
 		var panorama := PanoramaSkyMaterial.new()
 		panorama.panorama = hdr
-		panorama.energy_multiplier = 0.4
+		panorama.energy_multiplier = 0.85 if compat else 0.4
 		sky.sky_material = panorama
 	else:
 		var fallback := ProceduralSkyMaterial.new()
@@ -266,14 +275,14 @@ func _build_room() -> void:
 	add_child(cabinet)
 
 	# Key light is off to the side. A head-on key is what clipped the old windshield.
-	_sun(Vector3(7.4, 6.8, -1.6), Vector3(0, 0.9, 0.2), Color(1.0, 0.95, 0.88), 1.25, true)
-	_sun(Vector3(-5.5, 3.2, 4.4), Vector3(0, 0.8, 0), Color(0.62, 0.74, 1.0), 0.32, false)
-	_spot(Vector3(0.2, 5.0, -1.4), Vector3(0, 0.7, 0.2), Color(1, 0.97, 0.93), 2.4)
+	_sun(Vector3(7.4, 6.8, -1.6), Vector3(0, 0.9, 0.2), Color(1.0, 0.95, 0.88), 1.45 if compat else 1.25, true)
+	_sun(Vector3(-5.5, 3.2, 4.4), Vector3(0, 0.8, 0), Color(0.62, 0.74, 1.0), 0.55 if compat else 0.32, false)
+	_spot(Vector3(0.2, 5.0, -1.4), Vector3(0, 0.7, 0.2), Color(1, 0.97, 0.93), 1.7 if compat else 2.4)
 
 	var probe := ReflectionProbe.new()
 	probe.size = Vector3(14, 7, 14)
 	probe.origin_offset = Vector3(0, 1.8, 0)
-	probe.intensity = 0.85
+	probe.intensity = 1.05 if compat else 0.85
 	probe.interior = true
 	probe.box_projection = true
 	probe.enable_shadows = false

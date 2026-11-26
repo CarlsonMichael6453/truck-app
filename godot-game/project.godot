@@ -9,6 +9,7 @@ config_version=5
 config/name="Truck App"
 config/description="Fictional truck garage for Omnipresent Games. The store is a test register."
 run/main_scene="res://scenes/main.tscn"
+boot_splash/bg_color=Color(0.047, 0.055, 0.071, 1)
 config/features=PackedStringArray("4.5", "Mobile")
 config/icon="res://icon.svg"
 run/max_fps=60

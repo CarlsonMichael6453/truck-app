@@ -36,6 +36,7 @@ var _modal_product := ""
 var _modal_phase := "confirm"
 var _modal_message := ""
 var _busy := false
+var _touch_lane_at := 0
 
 
 func _ready() -> void:
@@ -117,7 +118,9 @@ func _build() -> void:
 	_vp = SubViewport.new()
 	_vp.own_world_3d = true
 	_vp.transparent_bg = false
-	_vp.msaa_3d = Viewport.MSAA_2X
+	# WebGL multisampled render targets often come back blank. The phone
+	# build keeps 2x MSAA. The web canvas is already hidpi, so edges stay fine.
+	_vp.msaa_3d = Viewport.MSAA_DISABLED if OS.has_feature("web") else Viewport.MSAA_2X
 	_vp.positional_shadow_atlas_size = 1024
 	_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	_vp.size = Vector2i(1080, 1200)
@@ -427,7 +430,15 @@ func _sync_vp() -> void:
 	var s := _vp_host.size
 	if s.x < 2.0 or s.y < 2.0:
 		return
-	var want := Vector2i(int(s.x), int(s.y))
+	var scale := 1.0
+	if OS.has_feature("web"):
+		# Cap the 3D buffer. A 3x iPhone canvas is larger than the GPU likes,
+		# and the container stretches this texture to the full view.
+		var longest := maxf(s.x, s.y)
+		var cap := 1800.0
+		if longest > cap:
+			scale = cap / longest
+	var want := Vector2i(maxi(int(s.x * scale), 2), maxi(int(s.y * scale), 2))
 	if _vp.size != want:
 		_vp.size = want
 
@@ -435,13 +446,49 @@ func _sync_vp() -> void:
 func _insets() -> Vector4:
 	var safe := DisplayServer.get_display_safe_area()
 	var win := DisplayServer.window_get_size()
-	if safe.size.x < 2 or safe.size.y < 2:
+	var from_display := Vector4.ZERO
+	if safe.size.x >= 2 and safe.size.y >= 2:
+		from_display = Vector4(
+			clampf(safe.position.x, 0, 80),
+			clampf(safe.position.y, 0, 80),
+			clampf(win.x - safe.end.x, 0, 80),
+			clampf(win.y - safe.end.y, 0, 80)
+		)
+	if from_display != Vector4.ZERO:
+		return from_display
+	if OS.has_feature("web"):
+		return _web_css_insets()
+	return Vector4.ZERO
+
+
+func _web_css_insets() -> Vector4:
+	var bridge := Engine.get_singleton("JavaScriptBridge")
+	if bridge == null:
+		return Vector4.ZERO
+	var raw = bridge.call("eval", """
+(function () {
+  var probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute;visibility:hidden;padding-top:env(safe-area-inset-top);padding-right:env(safe-area-inset-right);padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left)';
+  document.documentElement.appendChild(probe);
+  var cs = getComputedStyle(probe);
+  var dpr = window.devicePixelRatio || 1;
+  var parts = [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].map(function (value) {
+    return String((parseFloat(value) || 0) * dpr);
+  });
+  probe.remove();
+  return parts.join(',');
+})()
+""", true)
+	if typeof(raw) != TYPE_STRING:
+		return Vector4.ZERO
+	var bits: PackedStringArray = str(raw).split(",")
+	if bits.size() != 4:
 		return Vector4.ZERO
 	return Vector4(
-		clampf(safe.position.x, 0, 64),
-		clampf(safe.position.y, 0, 64),
-		clampf(win.x - safe.end.x, 0, 64),
-		clampf(win.y - safe.end.y, 0, 64)
+		clampf(float(bits[0]), 0, 80),
+		clampf(float(bits[1]), 0, 80),
+		clampf(float(bits[2]), 0, 80),
+		clampf(float(bits[3]), 0, 80)
 	)
 
 
@@ -457,10 +504,14 @@ func _on_view_input(event: InputEvent) -> void:
 	elif _tab == "play" and _phase == "run":
 		var pressed := false
 		var at := Vector2.ZERO
-		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if event is InputEventScreenTouch and event.pressed:
 			pressed = true
 			at = event.position
-		elif event is InputEventScreenTouch and event.pressed:
+			_touch_lane_at = Time.get_ticks_msec()
+		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			# A tap on the web page also synthesizes a mouse click. One lane change.
+			if OS.has_feature("web") and Time.get_ticks_msec() - _touch_lane_at < 450:
+				return
 			pressed = true
 			at = event.position
 		if pressed:

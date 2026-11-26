@@ -50,6 +50,12 @@ The site address is:
 
 `https://carlsonmichael6453.github.io/truck-app/`
 
+The same deploy publishes the Godot garage for a phone browser, including iPhone Safari:
+
+`https://carlsonmichael6453.github.io/truck-app/godot/`
+
+The header of the three.js app links to that page. The Godot build uses the Compatibility renderer with threads off, so GitHub Pages does not need cross-origin isolation headers. The first visit compiles the WebAssembly module, which on Safari can take a few seconds. Sound starts after the first tap. Drag orbits the truck, and a pinch zooms it. Portrait and landscape both lay out.
+
 GitHub only serves Pages from a private repository on a paid plan. On the free plan, Pages publishes from a public repository. The app has no secrets in the client bundle. If Pages refuses to publish, make the repository public or run the Wi-Fi steps above.
 
 ## How to play

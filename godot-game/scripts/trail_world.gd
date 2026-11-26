@@ -203,9 +203,10 @@ func _build_desert() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	var compat := MaterialsLib.compatibility_renderer()
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_exposure = 1.0
-	env.ambient_light_energy = 0.62
+	env.tonemap_exposure = 1.12 if compat else 1.0
+	env.ambient_light_energy = 0.9 if compat else 0.62
 	env.ssr_enabled = false
 	env.ssao_enabled = false
 	env.glow_enabled = false
@@ -285,8 +286,8 @@ func _build_desert() -> void:
 		mesa.material_override = MaterialsLib.concrete(null, 0.94, 0.0, Color(0.58, 0.4, 0.28))
 		add_child(mesa)
 
-	_sun(Vector3(-10, 12, 8), Vector3(0, 0.6, 0), Color(1.0, 0.9, 0.74), 1.45, true)
-	_sun(Vector3(8, 4, -6), Vector3(0, 1, 0), Color(0.5, 0.62, 0.95), 0.28, false)
+	_sun(Vector3(-10, 12, 8), Vector3(0, 0.6, 0), Color(1.0, 0.9, 0.74), 1.65 if compat else 1.45, true)
+	_sun(Vector3(8, 4, -6), Vector3(0, 1, 0), Color(0.5, 0.62, 0.95), 0.42 if compat else 0.28, false)
 
 	_camera = Camera3D.new()
 	_camera.current = true
