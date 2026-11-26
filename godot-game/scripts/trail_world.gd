@@ -190,10 +190,10 @@ func _snap_camera() -> void:
 
 
 func _chase(delta: float) -> void:
-	if _camera == null or _truck == null:
+	if _camera == null or _truck == null or not is_inside_tree() or not _truck.is_inside_tree():
 		return
-	var focus := _truck.global_position + Vector3(0, 1.05, 2.2)
-	var want := _truck.global_position + Vector3(-2.1, 2.7, -7.4)
+	var focus := _truck.global_position + Vector3(0.2, 1.15, 7.5)
+	var want := _truck.global_position + Vector3(-2.3, 3.6, -8.8)
 	var blend := 1.0 if delta >= 1.0 else minf(1.0, delta * 3.2)
 	_camera.global_position = _camera.global_position.lerp(want, blend)
 	_camera.look_at(focus, Vector3.UP)

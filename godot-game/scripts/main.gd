@@ -365,10 +365,6 @@ func _relayout() -> void:
 	_garage_sheet.visible = _tab == "garage"
 	_play_sheet.visible = _tab == "play" and not running
 	_store_sheet.visible = _tab == "store"
-	_garage.set_active(_tab == "garage")
-	_trail.set_active(_tab == "play")
-	if _tab == "play" and _phase == "lobby":
-		_trail.preview(_play_sheet.track_id)
 	_park(_view)
 	_park(_sheet)
 	var horizontal := landscape and _tab != "store" and not running
@@ -409,6 +405,10 @@ func _relayout() -> void:
 			_view.custom_minimum_size = Vector2(0, 280)
 			_mid.add_child(_view)
 			_mid.add_child(_sheet)
+	_garage.set_active(_tab == "garage")
+	_trail.set_active(_tab == "play")
+	if _tab == "play" and _phase == "lobby" and _trail.is_inside_tree():
+		_trail.preview(_play_sheet.track_id)
 	for child in _nav.get_children():
 		var on := str(child.get_meta("tab", "")) == _tab
 		child.add_theme_color_override("font_color", UiKit.COPPER if on else UiKit.MUTED)
@@ -548,43 +548,49 @@ func _arg(flag: String) -> String:
 
 
 func _run_capture(dir: String) -> void:
+	Game.mute_toasts = true
 	Game.autosave = false
 	Game.reset_progress()
 	Game.dismiss_intro()
 	DirAccess.make_dir_recursive_absolute(dir)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	print("renderer ", RenderingServer.get_current_rendering_method())
+	# Beauty camera stays on the lit side (+Z). That is the nose after import.
 	await _shot(dir.path_join("01-garage.png"), Vector2i(1080, 1920), func():
 		_show_tab("garage")
-		_garage.pose(0.82, 0.24, 6.3, 0.2)
+		_garage.pose(0.72, 0.24, 6.2, 0.12)
+	)
+	await _shot(dir.path_join("03-store.png"), Vector2i(1080, 1920), func():
+		_show_tab("store")
 	)
 	await _shot(dir.path_join("02-custom-truck.png"), Vector2i(1080, 1920), func():
 		_apply_show_loadout()
 		_show_tab("garage")
-		_garage.pose(0.46, 0.18, 5.35, 0.0)
-	)
-	await _shot(dir.path_join("03-store.png"), Vector2i(1080, 1920), func():
-		_show_tab("store")
+		_garage.pose(0.34, 0.2, 5.35, 0.0)
 	)
 	await _shot(dir.path_join("04-play.png"), Vector2i(1080, 1920), func():
 		_show_tab("play")
 		_phase = "run"
 		_layout_key = ""
-		_trail.pose_run("switchback", 175.0)
 		_relayout()
+		_trail.pose_run("switchback", 175.0)
 	)
 	await _shot(dir.path_join("05-garage-landscape.png"), Vector2i(1920, 1080), func():
 		_phase = "lobby"
 		_show_tab("garage")
-		_garage.pose(0.7, 0.22, 7.1, 0.15)
+		_garage.pose(0.78, 0.22, 7.05, 0.1)
 	)
 	get_tree().quit()
 
 
 func _shot(path: String, window_size: Vector2i, setup: Callable) -> void:
+	var window := get_window()
+	window.mode = Window.MODE_WINDOWED
+	window.size = window_size
 	DisplayServer.window_set_size(window_size)
-	for _i in 3:
+	for _i in 4:
 		await RenderingServer.frame_post_draw
+	print("window ", DisplayServer.window_get_size(), " viewport ", get_viewport().size)
 	setup.call()
 	for child in _toasts.get_children():
 		child.free()

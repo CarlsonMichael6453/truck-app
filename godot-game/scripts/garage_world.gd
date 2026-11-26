@@ -209,13 +209,15 @@ func _build_room() -> void:
 	_table.add_child(blob)
 
 	var wall := MaterialsLib.concrete(null, 0.84, 0.03, Color(0.16, 0.165, 0.18))
+	# Nose of the imported truck points down -Z, so the front-view backdrop is +Z.
+	_box(Vector3(16, 5.2, 0.18), Vector3(0, 2.6, 6.4), wall)
 	_box(Vector3(16, 5.2, 0.18), Vector3(0, 2.6, -6.4), wall)
-	_box(Vector3(0.18, 5.2, 14), Vector3(-7.4, 2.6, -1.1), wall)
-	_box(Vector3(0.18, 5.2, 14), Vector3(7.4, 2.6, -1.1), wall)
-	_box(Vector3(16, 0.18, 14), Vector3(0, 5.15, -1.1), wall)
-	_light_panel(Vector3(3.4, 0.08, 0.9), Vector3(-0.2, 4.85, 0.4), Color(1, 0.96, 0.9), 1.15)
-	_light_panel(Vector3(1.4, 1.6, 0.06), Vector3(4.6, 2.4, -2.2), Color(1.0, 0.78, 0.62), 0.85)
-	_light_panel(Vector3(1.2, 1.3, 0.06), Vector3(-4.8, 2.6, -1.4), Color(0.72, 0.8, 1.0), 0.7)
+	_box(Vector3(0.18, 5.2, 14), Vector3(-7.4, 2.6, 0.0), wall)
+	_box(Vector3(0.18, 5.2, 14), Vector3(7.4, 2.6, 0.0), wall)
+	_box(Vector3(16, 0.18, 14), Vector3(0, 5.15, 0.0), wall)
+	_light_panel(Vector3(3.6, 0.08, 1.1), Vector3(0.0, 4.85, -0.6), Color(1, 0.96, 0.9), 1.15)
+	_light_panel(Vector3(1.5, 1.8, 0.06), Vector3(4.8, 2.5, 1.2), Color(1.0, 0.78, 0.62), 0.85)
+	_light_panel(Vector3(1.3, 1.5, 0.06), Vector3(-4.9, 2.7, 0.4), Color(0.72, 0.8, 1.0), 0.7)
 
 	var title := Label3D.new()
 	title.text = "THE BAY"
@@ -224,8 +226,8 @@ func _build_room() -> void:
 	title.pixel_size = 0.005
 	title.modulate = Color.html("#f3efe6")
 	title.outline_size = 0
-	title.position = Vector3(0, 3.15, -6.22)
-	title.rotation.y = PI
+	title.position = Vector3(0, 3.25, -6.18)
+	title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	add_child(title)
 	var sub := Label3D.new()
 	sub.text = "OMNIPRESENT"
@@ -233,17 +235,17 @@ func _build_room() -> void:
 	sub.font_size = 64
 	sub.pixel_size = 0.004
 	sub.modulate = Color.html("#ff8a3d")
-	sub.position = Vector3(0, 2.55, -6.22)
-	sub.rotation.y = PI
+	sub.position = Vector3(0, 2.62, -6.18)
+	sub.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	add_child(sub)
 	var poster := MeshInstance3D.new()
 	var poster_mesh := QuadMesh.new()
-	poster_mesh.size = Vector2(2.4, 0.7)
+	poster_mesh.size = Vector2(2.2, 0.62)
 	poster.mesh = poster_mesh
-	poster.position = Vector3(-6.9, 2.2, -2.4)
-	poster.rotation.y = PI * 0.5
+	poster.position = Vector3(-4.6, 1.85, -6.18)
 	var poster_mat := StandardMaterial3D.new()
 	poster_mat.albedo_texture = load("res://environment/sign.png")
+	poster_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	poster_mat.roughness = 0.6
 	poster_mat.emission_enabled = true
 	poster_mat.emission_texture = poster_mat.albedo_texture

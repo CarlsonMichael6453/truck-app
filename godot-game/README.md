@@ -9,8 +9,10 @@ The phone renderer is **Mobile** (Godot 4.5.2, the same editor line as `engine-d
 Install Godot **4.5.x** (this project was checked with 4.5.2). Open `godot-game/project.godot` and press F5.
 
 ```bash
-godot --path godot-game
+godot --path godot-game --rendering-method mobile
 ```
+
+The project file already asks for the Mobile renderer. Pass the flag on the command line as well. A plain `godot --path` launch on this 4.5.2 build came up in Forward+ unless the flag was set. The editor's Play button follows the project setting.
 
 Drag to orbit the turntable. Pinch, or the mouse wheel, zooms. The bottom bar is Garage, Play, and Store. Switchback is open immediately. Gulch opens after one finish. On a trail, tap the left or right half of the screen (or A and D) to change lanes. Three hits ends the run.
 

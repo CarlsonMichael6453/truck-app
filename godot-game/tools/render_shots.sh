@@ -20,4 +20,6 @@ if [[ "${1:-}" == "--xvfb" ]]; then
 fi
 
 cd "$ROOT/godot-game"
-"${RUNNER[@]}" "$GODOT" --path . --rendering-driver vulkan --audio-driver Dummy --resolution 1080x1920 -- --capture "$OUT" "$@"
+# --rendering-method keeps the phone renderer even if a desktop launch would
+# otherwise come up in Forward+.
+"${RUNNER[@]}" "$GODOT" --path . --rendering-driver vulkan --rendering-method mobile --audio-driver Dummy -- --capture "$OUT" "$@"

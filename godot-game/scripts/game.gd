@@ -9,6 +9,7 @@ signal changed
 signal toast_emitted(text: String)
 
 var autosave := true
+var mute_toasts := false
 var coins := 750
 var cores := 0
 var owned: Array[String] = []
@@ -476,6 +477,8 @@ func _commit(notes: Array) -> void:
 	if autosave:
 		save_save()
 	changed.emit()
+	if mute_toasts:
+		return
 	for note in notes:
 		var text := str(note)
 		if text != "":
@@ -483,4 +486,5 @@ func _commit(notes: Array) -> void:
 
 
 func _fail(message: String) -> void:
-	toast_emitted.emit(message)
+	if not mute_toasts:
+		toast_emitted.emit(message)
