@@ -14,7 +14,9 @@ godot --path godot-game --rendering-method mobile
 
 The project file already asks for the Mobile renderer. Pass the flag on the command line as well. A plain `godot --path` launch on this 4.5.2 build came up in Forward+ unless the flag was set. The editor's Play button follows the project setting.
 
-Drag to orbit the turntable. Pinch, or the mouse wheel, zooms. The bottom bar is Garage, Play, and Store. Switchback is open immediately. Gulch opens after one finish. On a trail, tap the left or right half of the screen (or A and D) to change lanes. Three hits ends the run.
+Drag to orbit the turntable. Pinch, or the mouse wheel, zooms. The bottom bar is Garage, Play, and Store. Switchback is open immediately. Gulch opens after one finish. On a trail, a short 3-2-1 count starts the run. Tap the left or right half of the screen, swipe left or right, or press A and D to change lanes. Three hits ends the run. **Pause** (or Esc, P, Space) stops the run, and leaving the app or the browser tab pauses it on its own. The pause card can pull off and bank the coins so far.
+
+Sound is synthesized in `scripts/sfx.gd`, so there are no audio files: coin, hit, mud, boost, lane change, countdown, finish, and an engine note that rises with speed. It is on by default and toggles from the trail board or the pause card. A browser keeps audio silent until the first tap.
 
 Progress is `user://truck_bay.json` (on a phone that is the app sandbox, on desktop it is Godot's user data folder). The store can reset it.
 

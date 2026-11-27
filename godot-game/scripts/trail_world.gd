@@ -6,7 +6,11 @@ extends Node3D
 
 const LANE := 2.55
 
+const COUNTDOWN := 2.4
+
 signal finished(payout: Dictionary)
+## kind is coin, hit, mud, boost, crash, finish, lane, tick, or go.
+signal bumped(kind: String)
 
 var phase := "lobby"
 var track_id := "switchback"
@@ -20,6 +24,20 @@ var _entities: Node3D
 var _move := 0
 var _active := false
 var _signature := ""
+var paused := false
+var _count := 0.0
+var _count_step := -1
+var _nodes := {}
+var _by_id := {}
+var _coin_nodes: Array[Node3D] = []
+var _scenery: Array[Dictionary] = []
+var _shake := 0.0
+var _lean := 0.0
+var _last_lane_pos := 1.0
+var _clock := 0.0
+var _body_base := 0.0
+var _dust: CPUParticles3D
+var _dust_mat: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -57,11 +75,39 @@ func start(id: String) -> bool:
 	_load(id)
 	_sync_truck()
 	run = TrailRun.new()
-	phase = "run"
+	phase = "count"
+	paused = false
+	_count = COUNTDOWN
+	_count_step = -1
 	_move = 0
+	_shake = 0.0
+	_lean = 0.0
+	_last_lane_pos = 1.0
 	_place(0.0, 1.0)
 	_snap_camera()
 	return true
+
+
+## Text for the big countdown label, empty once the run is rolling.
+func countdown_text() -> String:
+	if phase != "count":
+		return ""
+	var step := int(ceil(_count / (COUNTDOWN / 3.0)))
+	return str(clampi(step, 1, 3))
+
+
+func running() -> bool:
+	return phase == "run" or phase == "count"
+
+
+func progress() -> float:
+	if run == null or _track.is_empty():
+		return 0.0
+	return clampf(run.z / float(_track["length"]), 0.0, 1.0)
+
+
+func set_paused(on: bool) -> void:
+	paused = on and running()
 
 
 func pose_run(id: String, at_z: float) -> void:
@@ -78,13 +124,17 @@ func pose_run(id: String, at_z: float) -> void:
 
 
 func nudge(dir: int) -> void:
-	if phase == "run":
+	if phase == "run" and not paused and run != null:
+		var target := run.lane + dir
+		if target >= 0 and target <= 2:
+			bumped.emit("lane")
 		_move = dir
 
 
 func bail() -> void:
-	if phase != "run" or run == null:
+	if not running() or run == null:
 		return
+	paused = false
 	run.bail()
 	phase = "done"
 	finished.emit(run.settle(_track))
@@ -117,17 +167,119 @@ func flag_text() -> String:
 func _process(delta: float) -> void:
 	if not _active:
 		return
-	if phase == "run" and run != null:
+	if paused:
+		return
+	_clock += delta
+	if phase == "count":
+		_count -= delta
+		var step := int(ceil(_count / (COUNTDOWN / 3.0)))
+		if step != _count_step and step >= 1:
+			_count_step = step
+			bumped.emit("tick")
+		if _count <= 0.0:
+			phase = "run"
+			bumped.emit("go")
+		_pose_truck(delta, 1.0)
+		_spin_coins(delta)
+		_dust_follow(false)
+	elif phase == "run" and run != null:
 		var move := _move
 		_move = 0
-		run.step(_track, move, delta)
+		var before := run.resolved.duplicate()
+		var events: Array = run.step(_track, move, delta)
+		_react(before)
+		for event in events:
+			bumped.emit(str(event))
+			if event == "hit" or event == "crash":
+				_shake = 0.45 if event == "hit" else 0.8
 		_place(run.z, run.lane_pos)
 		_spin(delta)
+		_pose_truck(delta, run.lane_pos)
+		_spin_coins(delta)
+		_dust_follow(true)
 		if run.status != "running":
 			phase = "done"
+			_dust_follow(false)
+			if _truck:
+				_truck.visible = true
 			finished.emit(run.settle(_track))
 			return
+	else:
+		_dust_follow(false)
+		_spin_coins(delta)
 	_chase(delta)
+
+
+## Coins pop, and anything the truck hits gets shoved off the line.
+func _react(before: Dictionary) -> void:
+	for id in run.resolved.keys():
+		if before.has(id):
+			continue
+		var entity: Dictionary = _by_id.get(id, {})
+		if entity.is_empty() or int(entity["lane"]) != run.lane:
+			continue
+		var node := _nodes.get(id) as Node3D
+		if node == null:
+			continue
+		var kind := str(entity["kind"])
+		if kind == "coin":
+			_coin_nodes.erase(node)
+			var tw := create_tween().set_parallel(true)
+			tw.tween_property(node, "position:y", node.position.y + 1.6, 0.22).set_ease(Tween.EASE_OUT)
+			tw.tween_property(node, "scale", Vector3(1.8, 1.8, 1.8), 0.22)
+			tw.chain().tween_callback(node.hide)
+		elif kind == "rock" or kind == "barrier":
+			var side := -1.0 if int(entity["lane"]) == 0 else 1.0
+			if int(entity["lane"]) == 1:
+				side = 1.0 if randf() < 0.5 else -1.0
+			var tw := create_tween().set_parallel(true)
+			tw.tween_property(node, "position", node.position + Vector3(side * 5.0, 1.2, 7.0), 0.45).set_ease(Tween.EASE_OUT)
+			tw.tween_property(node, "rotation", node.rotation + Vector3(2.4, 0.0, side * 3.0), 0.45)
+			tw.chain().tween_callback(node.hide)
+
+
+func _spin_coins(delta: float) -> void:
+	var near := run.z if run else 0.0
+	for coin in _coin_nodes:
+		if coin.position.z > near - 4.0 and coin.position.z < near + 90.0:
+			coin.rotate(Vector3.UP, delta * 3.2)
+
+
+## Lean into lane changes, bob on the trail, and blink after a hit.
+func _pose_truck(delta: float, lane_pos: float) -> void:
+	if _truck == null:
+		return
+	var body := _truck.get_node_or_null("Body") as Node3D
+	var swing := (lane_pos - _last_lane_pos) / maxf(delta, 0.001)
+	_last_lane_pos = lane_pos
+	_lean = lerpf(_lean, clampf(swing * 0.05, -0.4, 0.4), minf(1.0, delta * 10.0))
+	_truck.rotation.y = -_lean * 0.55
+	if body:
+		body.rotation.z = -_lean * 0.25
+		var rough := 0.012 if phase == "run" else 0.004
+		if run and run.mud > 0.0:
+			rough = 0.03
+		body.position.y = _body_base + sin(_clock * 23.0) * rough + sin(_clock * 9.0) * rough * 0.6
+		body.rotation.x = -0.035 if (run and run.boost > 0.0) else 0.0
+	if run and run.invuln > 0.0 and phase == "run":
+		_truck.visible = int(run.invuln * 14.0) % 2 == 0
+	else:
+		_truck.visible = true
+
+
+func _dust_follow(on: bool) -> void:
+	if _dust == null:
+		return
+	_dust.emitting = on and _truck != null
+	if _truck == null:
+		return
+	_dust.global_position = _truck.global_position + Vector3(0.0, 0.12, -1.9)
+	if run and run.mud > 0.0:
+		_dust_mat.albedo_color = Color(0.25, 0.18, 0.12, 0.7)
+	elif run and run.boost > 0.0:
+		_dust_mat.albedo_color = Color(0.88, 0.74, 0.55, 0.5)
+	else:
+		_dust_mat.albedo_color = Color(0.82, 0.68, 0.5, 0.32)
 
 
 func _load(id: String) -> void:
@@ -141,11 +293,19 @@ func _load(id: String) -> void:
 	_entities = Node3D.new()
 	_entities.name = "Entities"
 	add_child(_entities)
+	_nodes = {}
+	_by_id = {}
+	_coin_nodes = []
 	for entity in track["entities"]:
-		var node := _entity_mesh(str(entity["kind"]))
-		node.position = Vector3((int(entity["lane"]) - 1) * LANE, 0.0, float(entity["z"]))
+		var kind := str(entity["kind"])
+		var node := _entity_mesh(kind)
+		node.position = Vector3((int(entity["lane"]) - 1) * LANE, node.position.y, float(entity["z"]))
 		node.name = str(entity["id"])
 		_entities.add_child(node)
+		_nodes[str(entity["id"])] = node
+		_by_id[str(entity["id"])] = entity
+		if kind == "coin":
+			_coin_nodes.append(node)
 
 
 func _sync_truck() -> void:
@@ -158,6 +318,8 @@ func _sync_truck() -> void:
 	_truck = TruckBuilder.build(Game.truck_id, Game.loadout())
 	_truck.name = "Truck"
 	add_child(_truck)
+	var body := _truck.get_node_or_null("Body") as Node3D
+	_body_base = body.position.y if body else 0.0
 
 
 func _place(z: float, lane_pos: float) -> void:
@@ -168,6 +330,14 @@ func _place(z: float, lane_pos: float) -> void:
 	_truck.rotation = Vector3(0.0, 0.0, 0.0)
 	if _ground:
 		_ground.position.z = z
+	# Side rocks and mesas leapfrog ahead so the desert lasts the whole trail.
+	for item in _scenery:
+		var node: Node3D = item["node"]
+		var span := float(item["span"])
+		while node.position.z < z - 30.0:
+			node.position.z += span
+		while node.position.z > z + span - 30.0:
+			node.position.z -= span
 
 
 func _spin(delta: float) -> void:
@@ -197,6 +367,17 @@ func _chase(delta: float) -> void:
 	var blend := 1.0 if delta >= 1.0 else minf(1.0, delta * 3.2)
 	_camera.global_position = _camera.global_position.lerp(want, blend)
 	_camera.look_at(focus, Vector3.UP)
+	var boosting := run != null and phase == "run" and run.boost > 0.0
+	var fov_want := 46.0 if boosting else 38.0
+	_camera.fov = fov_want if delta >= 1.0 else lerpf(_camera.fov, fov_want, minf(1.0, delta * 4.0))
+	if _shake > 0.0 and delta < 1.0:
+		_shake = maxf(0.0, _shake - delta * 1.6)
+		var k := _shake * _shake
+		_camera.h_offset = randf_range(-1.0, 1.0) * k * 0.5
+		_camera.v_offset = randf_range(-1.0, 1.0) * k * 0.35
+	else:
+		_camera.h_offset = 0.0
+		_camera.v_offset = 0.0
 
 
 func _build_desert() -> void:
@@ -274,6 +455,7 @@ func _build_desert() -> void:
 		rock.position = Vector3(side * (9.0 + float(i % 4)), mesh.radius * 0.4, float(i) * 22.0)
 		rock.material_override = MaterialsLib.concrete(null, 0.9, 0.02, Color(0.45, 0.34, 0.26))
 		add_child(rock)
+		_scenery.append({"node": rock, "span": 176.0})
 	for i in 4:
 		var mesa := MeshInstance3D.new()
 		var mesh := CylinderMesh.new()
@@ -285,6 +467,8 @@ func _build_desert() -> void:
 		mesa.position = Vector3(side * 24.0, mesh.height * 0.32, 20.0 + float(i) * 40.0)
 		mesa.material_override = MaterialsLib.concrete(null, 0.94, 0.0, Color(0.58, 0.4, 0.28))
 		add_child(mesa)
+		_scenery.append({"node": mesa, "span": 160.0})
+	_build_dust()
 
 	_sun(Vector3(-10, 12, 8), Vector3(0, 0.6, 0), Color(1.0, 0.9, 0.74), 1.65 if compat else 1.45, true)
 	_sun(Vector3(8, 4, -6), Vector3(0, 1, 0), Color(0.5, 0.62, 0.95), 0.42 if compat else 0.28, false)
@@ -369,3 +553,53 @@ func _sun(from: Vector3, to: Vector3, color: Color, energy: float, shadows: bool
 		light.shadow_normal_bias = 1.4
 	add_child(light)
 	light.look_at_from_position(from, to, Vector3.UP)
+
+
+func _build_dust() -> void:
+	_dust = CPUParticles3D.new()
+	_dust.name = "Dust"
+	_dust.amount = 28
+	_dust.lifetime = 0.7
+	_dust.emitting = false
+	_dust.local_coords = false
+	_dust.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	_dust.emission_box_extents = Vector3(1.1, 0.05, 0.15)
+	_dust.direction = Vector3(0, 0.25, -1)
+	_dust.spread = 35.0
+	_dust.initial_velocity_min = 1.0
+	_dust.initial_velocity_max = 2.4
+	_dust.gravity = Vector3(0, 0.4, 0)
+	_dust.scale_amount_min = 0.5
+	_dust.scale_amount_max = 1.0
+	var curve := Curve.new()
+	curve.add_point(Vector2(0, 0.4))
+	curve.add_point(Vector2(1, 1.6))
+	_dust.scale_amount_curve = curve
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.55, 0.55)
+	# Soft round puff, made in code so there is no texture file to import.
+	var puff := GradientTexture2D.new()
+	puff.width = 64
+	puff.height = 64
+	puff.fill = GradientTexture2D.FILL_RADIAL
+	puff.fill_from = Vector2(0.5, 0.5)
+	puff.fill_to = Vector2(1.0, 0.5)
+	var soft := Gradient.new()
+	soft.set_color(0, Color(1, 1, 1, 1))
+	soft.set_color(1, Color(1, 1, 1, 0))
+	puff.gradient = soft
+	_dust_mat = StandardMaterial3D.new()
+	_dust_mat.albedo_texture = puff
+	_dust_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_dust_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_dust_mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	_dust_mat.vertex_color_use_as_albedo = true
+	_dust_mat.albedo_color = Color(0.82, 0.68, 0.5, 0.32)
+	quad.material = _dust_mat
+	_dust.mesh = quad
+	var fade := Gradient.new()
+	fade.set_color(0, Color(1, 1, 1, 0.9))
+	fade.set_color(1, Color(1, 1, 1, 0.0))
+	_dust.color_ramp = fade
+	_dust.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_dust)

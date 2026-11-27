@@ -18,7 +18,7 @@ var loadouts := {}
 var stats := {}
 var quest_rewarded: Array[String] = []
 var seen_intro := false
-var sound := false
+var sound := true
 
 
 func _ready() -> void:
@@ -298,7 +298,7 @@ func toggle_sound() -> void:
 
 func to_dict() -> Dictionary:
 	return {
-		"version": 1,
+		"version": 2,
 		"coins": coins,
 		"cores": cores,
 		"owned": owned.duplicate(),
@@ -356,7 +356,7 @@ func _apply_default() -> void:
 	}
 	quest_rewarded = []
 	seen_intro = false
-	sound = false
+	sound = true
 
 
 func _apply_dict(data: Dictionary) -> void:
@@ -386,7 +386,12 @@ func _apply_dict(data: Dictionary) -> void:
 				if quest["id"] == text and not quest_rewarded.has(text):
 					quest_rewarded.append(text)
 	seen_intro = data.get("seen_intro") == true
-	sound = data.get("sound") == true
+	# Version 1 saves stored sound off by default before the Godot build had any
+	# audio, so that value was never a player's choice. Turn it on for them once.
+	if int(data.get("version", 1)) >= 2:
+		sound = data.get("sound") != false
+	else:
+		sound = true
 
 
 func _clean_loadout(candidate, fallback: Dictionary) -> Dictionary:
