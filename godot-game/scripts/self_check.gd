@@ -8,6 +8,13 @@ static func run() -> int:
 	var failed := false
 	Game.autosave = false
 	var backup := Game.to_dict()
+	failed = _expect(DragScroll.axis_for(Vector2(4, 1), true, true) == Vector2.ZERO, "drag below threshold stays a tap") or failed
+	failed = _expect(DragScroll.axis_for(Vector2(40, 6), true, true) == Vector2(1, 0), "horizontal drag scrolls sideways") or failed
+	failed = _expect(DragScroll.axis_for(Vector2(6, 40), true, true) == Vector2(0, 1), "vertical drag scrolls down") or failed
+	failed = _expect(DragScroll.axis_for(Vector2(40, 4), false, true) == Vector2.ZERO, "sideways drag yields when only vertical") or failed
+	var pulled := DragScroll.rubber_limit(-200.0, 300.0)
+	failed = _expect(pulled < 0.0 and pulled > -float(DragScroll.OVERSCROLL_LIMIT), "overscroll stays clamped") or failed
+	failed = _expect(is_equal_approx(DragScroll.rubber_limit(40.0, 300.0), 40.0), "in-range drag is 1:1") or failed
 	failed = _expect(Catalog.TRUCKS.size() == 4, "four trucks") or failed
 	failed = _expect(Catalog.PARTS.size() == 36, "36 parts, got %d" % Catalog.PARTS.size()) or failed
 	for rim_id in Catalog.SLEEK_RIMS:

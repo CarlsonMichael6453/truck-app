@@ -14,13 +14,17 @@ func _ready() -> void:
 func refresh() -> void:
 	for child in get_children():
 		remove_child(child)
-		child.free()
-	var scroll := ScrollContainer.new()
+		child.queue_free()
+	var scroll := DragScroll.new()
+	scroll.name = "SheetScroll"
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	var box := VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 12)
+	box.mouse_filter = Control.MOUSE_FILTER_PASS
 	var banner := PanelContainer.new()
 	banner.add_theme_stylebox_override("panel", UiKit.box(Color(UiKit.COPPER, 0.14), 20, UiKit.COPPER))
 	var banner_box := VBoxContainer.new()

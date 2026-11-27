@@ -1,5 +1,5 @@
 class_name GarageSheet
-extends VBoxContainer
+extends DragScroll
 
 signal open_store
 
@@ -9,9 +9,11 @@ var _scroller: ScrollContainer
 
 
 func _ready() -> void:
+	horizontal_scroll_mode = SCROLL_MODE_DISABLED
+	vertical_scroll_mode = SCROLL_MODE_AUTO
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
-	add_theme_constant_override("separation", 8)
+	super._ready()
 	Game.changed.connect(func(): refresh.call_deferred())
 	refresh()
 
@@ -19,10 +21,15 @@ func _ready() -> void:
 func refresh() -> void:
 	if _scroller:
 		_scroll_px = _scroller.scroll_horizontal
+	var keep_y := scroll_vertical
 	for child in get_children():
 		remove_child(child)
-		child.free()
+		child.queue_free()
 	_scroller = null
+	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_theme_constant_override("separation", 8)
+	box.mouse_filter = Control.MOUSE_FILTER_PASS
 	var spec := Game.truck()
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
@@ -51,10 +58,10 @@ func refresh() -> void:
 	row.add_child(prev)
 	row.add_child(title_box)
 	row.add_child(nxt)
-	add_child(row)
+	box.add_child(row)
 	var blurb := UiKit.label(str(spec["blurb"]), 16, UiKit.MUTED)
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	add_child(blurb)
+	box.add_child(blurb)
 	# Wraps to a second line on a phone so every category stays in view.
 	var chips := HFlowContainer.new()
 	chips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -65,21 +72,26 @@ func refresh() -> void:
 		var chip := UiKit.button(str(cat["label"]), "copper" if id == _category else "panel")
 		chip.pressed.connect(_pick_category.bind(id))
 		chips.add_child(chip)
-	add_child(chips)
+	box.add_child(chips)
 	if _category == "paint":
-		add_child(_paint_block())
+		box.add_child(_paint_block())
 	else:
-		add_child(_part_row())
+		box.add_child(_part_row())
 	var count := UiKit.label("%d of %d parts in the bay" % [Game.owned.size(), Catalog.PARTS.size()], 14, UiKit.MUTED)
-	add_child(count)
+	box.add_child(count)
+	add_child(box)
+	scroll_vertical = keep_y
+	set_deferred("scroll_vertical", keep_y)
 	if _scroller:
 		_scroller.scroll_horizontal = _scroll_px
+		_scroller.set_deferred("scroll_horizontal", _scroll_px)
 
 
 func _pick_category(id: String) -> void:
 	_category = id
 	_scroll_px = 0
-	refresh()
+	# The chip that emitted this is still inside the signal. Free it next frame.
+	refresh.call_deferred()
 
 
 func _paint_block() -> Control:
@@ -115,21 +127,24 @@ func _paint_block() -> Control:
 		var chip := UiKit.button(str(finish["name"]), "copper" if id == finish_id else "panel")
 		chip.pressed.connect(Game.set_finish.bind(id))
 		finishes.add_child(chip)
-	var finish_scroll := ScrollContainer.new()
+	var finish_scroll := DragScroll.new()
+	finish_scroll.name = "FinishScroll"
 	finish_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	finish_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	finish_scroll.custom_minimum_size = Vector2(0, 64)
+	finish_scroll.custom_minimum_size = Vector2(0, 76)
+	finish_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	finish_scroll.add_child(finishes)
 	box.add_child(finish_scroll)
 	return box
 
 
 func _part_row() -> Control:
-	_scroller = ScrollContainer.new()
-	_scroller.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	_scroller.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroller = DragScroll.new()
+	_scroller.name = "PartScroll"
+	_scroller.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroller.custom_minimum_size = Vector2(0, 250)
 	_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_scroller.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	var equipped := str(Game.loadout().get(_category, ""))
