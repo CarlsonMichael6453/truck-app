@@ -55,19 +55,17 @@ func refresh() -> void:
 	var blurb := UiKit.label(str(spec["blurb"]), 16, UiKit.MUTED)
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(blurb)
-	var chips := HBoxContainer.new()
-	chips.add_theme_constant_override("separation", 8)
+	# Wraps to a second line on a phone so every category stays in view.
+	var chips := HFlowContainer.new()
+	chips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chips.add_theme_constant_override("h_separation", 8)
+	chips.add_theme_constant_override("v_separation", 8)
 	for cat in Catalog.CATEGORIES:
 		var id := str(cat["id"])
 		var chip := UiKit.button(str(cat["label"]), "copper" if id == _category else "panel")
 		chip.pressed.connect(_pick_category.bind(id))
 		chips.add_child(chip)
-	var chip_scroll := ScrollContainer.new()
-	chip_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	chip_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	chip_scroll.custom_minimum_size = Vector2(0, 64)
-	chip_scroll.add_child(chips)
-	add_child(chip_scroll)
+	add_child(chips)
 	if _category == "paint":
 		add_child(_paint_block())
 	else:
