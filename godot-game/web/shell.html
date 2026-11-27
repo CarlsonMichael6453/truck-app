@@ -8,6 +8,7 @@
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 		<meta name="theme-color" content="#0c0e12">
 		<title>$GODOT_PROJECT_NAME</title>
+		<!-- truck-touch-scroll -->
 		<style>
 html, body, #canvas {
 	margin: 0;
@@ -35,6 +36,7 @@ html, body {
 #canvas {
 	display: block;
 	touch-action: none;
+	-ms-touch-action: none;
 }
 
 #canvas:focus {
@@ -155,12 +157,16 @@ html, body {
 	document.addEventListener('gesturestart', blockGesture, { passive: false });
 	document.addEventListener('gesturechange', blockGesture, { passive: false });
 	document.addEventListener('gestureend', blockGesture, { passive: false });
-	// Keep pinch and drag on the canvas. iOS otherwise turns them into page zoom.
-	document.addEventListener('touchmove', function (event) {
+	// Keep pinch and drag on the canvas. iOS otherwise turns them into page zoom
+	// or a scroll. touch-action: none is on the canvas; preventDefault backs it up.
+	// The viewport meta still locks page zoom (user-scalable=no).
+	function keepOnCanvas(event) {
 		if (event.cancelable) {
 			event.preventDefault();
 		}
-	}, { passive: false });
+	}
+	document.addEventListener('touchstart', keepOnCanvas, { passive: false });
+	document.addEventListener('touchmove', keepOnCanvas, { passive: false });
 })();
 		</script>
 	</head>

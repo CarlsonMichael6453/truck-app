@@ -561,9 +561,10 @@ func _relayout() -> void:
 			_mid.add_child(_view)
 			_mid.add_child(_sheet)
 		else:
-			var sheet_h := clampf(size.y * 0.4, 340.0, 540.0)
+			# The list needs a tall hit area. The truck view keeps the rest.
+			var sheet_h := clampf(size.y * 0.48, 440.0, 720.0)
 			_sheet.custom_minimum_size = Vector2(0, sheet_h)
-			_view.custom_minimum_size = Vector2(0, 280)
+			_view.custom_minimum_size = Vector2(0, 260)
 			_mid.add_child(_view)
 			_mid.add_child(_sheet)
 	_garage.set_active(_tab == "garage")

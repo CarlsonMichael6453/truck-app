@@ -28,12 +28,10 @@ func show_lobby() -> void:
 
 func show_result(payout: Dictionary, notes: Array, best: String = "") -> void:
 	_mode = "result"
-	for child in get_children():
-		remove_child(child)
-		child.free()
+	var box := _open_scroll()
 	var track := Catalog.track(str(payout.get("track_id", track_id)))
 	var kicker := UiKit.label(str(track.get("name", "Trail")).to_upper(), 14, UiKit.COPPER)
-	add_child(kicker)
+	box.add_child(kicker)
 	var title := "The wash got you"
 	if bool(payout.get("clean", false)):
 		title = "Clean line"
@@ -41,9 +39,9 @@ func show_result(payout: Dictionary, notes: Array, best: String = "") -> void:
 		title = "You made the end"
 	elif str(payout.get("status", "")) == "bailed":
 		title = "You pulled off"
-	add_child(UiKit.label(title, 42, UiKit.CREAM, true))
+	box.add_child(UiKit.label(title, 42, UiKit.CREAM, true))
 	if best != "":
-		add_child(UiKit.label(best.to_upper(), 16, UiKit.COPPER2, true))
+		box.add_child(UiKit.label(best.to_upper(), 16, UiKit.COPPER2, true))
 	var stats := HBoxContainer.new()
 	stats.add_theme_constant_override("separation", 8)
 	stats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -60,33 +58,44 @@ func show_result(payout: Dictionary, notes: Array, best: String = "") -> void:
 		col.add_child(val)
 		card.add_child(col)
 		stats.add_child(card)
-	add_child(stats)
+	box.add_child(stats)
 	if notes.size() > 0:
 		for note in notes:
 			var line := UiKit.label(str(note), 16, UiKit.MUTED)
 			line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			add_child(line)
+			box.add_child(line)
 	var again := UiKit.button("Ride again", "copper")
 	again.pressed.connect(func(): start_run.emit(track_id))
-	add_child(again)
+	box.add_child(again)
 	var board := UiKit.button("Trail board", "panel")
 	board.pressed.connect(func():
 		back_to_board.emit()
 		show_lobby()
 	)
-	add_child(board)
+	box.add_child(board)
 
 
-func _rebuild_lobby() -> void:
+func _open_scroll() -> VBoxContainer:
 	for child in get_children():
 		remove_child(child)
-		child.free()
-	var scroll := ScrollContainer.new()
+		child.queue_free()
+	var scroll := DragScroll.new()
+	scroll.name = "SheetScroll"
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	var box := VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 10)
+	box.mouse_filter = Control.MOUSE_FILTER_PASS
+	scroll.add_child(box)
+	add_child(scroll)
+	return box
+
+
+func _rebuild_lobby() -> void:
+	var box := _open_scroll()
 	var today := Game.today()
 	var streak := Game.preview_streak(today)
 	var reward: Dictionary = Catalog.DAILY[(maxi(1, streak) - 1) % Catalog.DAILY.size()]
@@ -173,8 +182,6 @@ func _rebuild_lobby() -> void:
 		col.add_child(bar)
 		card.add_child(col)
 		box.add_child(card)
-	scroll.add_child(box)
-	add_child(scroll)
 
 
 func _pick_track(id: String) -> void:
