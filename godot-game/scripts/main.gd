@@ -37,11 +37,26 @@ var _modal_phase := "confirm"
 var _modal_message := ""
 var _busy := false
 var _touch_lane_at := 0
+var _sfx: Sfx
+var _hud_count: Label
+var _hud_progress: ColorRect
+var _hud_flash: ColorRect
+var _pause_btn: Button
+var _pause: Control
+var _pause_sound: Button
+var _touch_start := Vector2.ZERO
+var _touch_down := false
+var _touch_swiped := false
+var _flash := 0.0
+var _best_before := {}
 
 
 func _ready() -> void:
 	theme = UiKit.theme()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sfx = Sfx.new()
+	_sfx.name = "Sfx"
+	add_child(_sfx)
 	_build()
 	Game.changed.connect(_refresh_chrome)
 	Game.toast_emitted.connect(_push_toast)
@@ -56,7 +71,7 @@ func _ready() -> void:
 		await _run_capture(cap)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_relayout()
 	if _phase == "run" and _trail:
 		_hud_title.text = str(Catalog.track(_trail.track_id).get("name", "Trail"))
@@ -64,6 +79,26 @@ func _process(_delta: float) -> void:
 		_hud_coins.text = "%s" % Catalog.commas(_trail.run_coins())
 		_hud_hearts.text = _hearts(_trail.hits())
 		_hud_flag.text = _trail.flag_text()
+		var count := _trail.countdown_text()
+		_hud_count.text = count
+		_hud_count.visible = count != "" and not _trail.paused
+		_hud_progress.anchor_right = _trail.progress()
+		var boost := _trail.run != null and _trail.run.boost > 0.0
+		var mud := _trail.run != null and _trail.run.mud > 0.0
+		var speed01 := 0.15 if _trail.phase == "count" else (1.0 if boost else (0.2 if mud else 0.6))
+		_sfx.engine(not _trail.paused and _trail.running() and _tab == "play", speed01)
+	else:
+		_sfx.engine(false)
+	if _flash > 0.0:
+		_flash = maxf(0.0, _flash - delta * 2.6)
+	_hud_flash.color = Color(UiKit.DANGER, _flash * 0.45)
+
+
+func _notification(what: int) -> void:
+	# Leaving the app or the browser tab mid-run pauses instead of crashing into a rock.
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
+		if _phase == "run" and _trail and _trail.running() and not _busy:
+			_set_paused(true)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -72,8 +107,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_trail.nudge(-1)
 		elif event.keycode == KEY_D or event.keycode == KEY_RIGHT:
 			_trail.nudge(1)
-		elif event.keycode == KEY_ESCAPE:
-			_bail()
+		elif event.keycode == KEY_ESCAPE or event.keycode == KEY_P or event.keycode == KEY_SPACE:
+			_set_paused(not _trail.paused)
 
 
 func _build() -> void:
@@ -142,6 +177,7 @@ func _build() -> void:
 	_trail = TrailWorld.new()
 	_trail.name = "Trail"
 	_trail.finished.connect(_on_finished)
+	_trail.bumped.connect(_on_bumped)
 	_vp.add_child(_trail)
 	_sheet = PanelContainer.new()
 	_sheet.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -170,6 +206,7 @@ func _build() -> void:
 	_nav.custom_minimum_size.y = 76
 	for id in ["garage", "play", "store"]:
 		var btn := Button.new()
+		btn.pressed.connect(func(): _sfx.play("tap"))
 		btn.text = id.capitalize()
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -235,22 +272,131 @@ func _build_hud() -> Control:
 	right.offset_bottom = 40
 	hud.add_child(left)
 	hud.add_child(right)
-	var bail := UiKit.button("Pull off", "panel")
-	bail.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	bail.offset_right = -16
-	bail.offset_bottom = -16
-	bail.offset_left = -150
-	bail.offset_top = -68
-	bail.mouse_filter = Control.MOUSE_FILTER_STOP
-	bail.pressed.connect(_bail)
-	hud.add_child(bail)
-	var hint := UiKit.label("Tap the sides to change lanes", 14, Color(1, 1, 1, 0.7))
+	_hud_flash = ColorRect.new()
+	_hud_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_hud_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_flash.color = Color(UiKit.DANGER, 0.0)
+	hud.add_child(_hud_flash)
+	hud.move_child(_hud_flash, 0)
+	# Trail progress along the very top of the view.
+	var track_bar := ColorRect.new()
+	track_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	track_bar.offset_bottom = 6
+	track_bar.color = Color(0, 0, 0, 0.45)
+	track_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_progress = ColorRect.new()
+	_hud_progress.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_hud_progress.anchor_right = 0.0
+	_hud_progress.color = UiKit.COPPER
+	_hud_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	track_bar.add_child(_hud_progress)
+	hud.add_child(track_bar)
+	_hud_count = UiKit.label("3", 140, UiKit.CREAM, true)
+	_hud_count.set_anchors_preset(Control.PRESET_CENTER)
+	_hud_count.offset_left = -120
+	_hud_count.offset_right = 120
+	_hud_count.offset_top = -110
+	_hud_count.offset_bottom = 90
+	_hud_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hud_count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_hud_count.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	_hud_count.add_theme_constant_override("shadow_offset_x", 3)
+	_hud_count.add_theme_constant_override("shadow_offset_y", 3)
+	_hud_count.visible = false
+	hud.add_child(_hud_count)
+	_pause_btn = UiKit.button("Pause", "panel")
+	_pause_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_pause_btn.offset_right = -16
+	_pause_btn.offset_bottom = -16
+	_pause_btn.offset_left = -150
+	_pause_btn.offset_top = -68
+	_pause_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	_pause_btn.pressed.connect(func(): _set_paused(true))
+	hud.add_child(_pause_btn)
+	_pause = _build_pause()
+	hud.add_child(_pause)
+	var hint := UiKit.label("Tap or swipe to change lanes", 14, Color(1, 1, 1, 0.7))
 	hint.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	hint.offset_left = 16
 	hint.offset_bottom = -24
 	hint.offset_top = -48
 	hud.add_child(hint)
 	return hud
+
+
+func _build_pause() -> Control:
+	var layer := Control.new()
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.visible = false
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(dim)
+	var card := PanelContainer.new()
+	card.set_anchors_preset(Control.PRESET_CENTER)
+	card.offset_left = -170
+	card.offset_right = 170
+	card.offset_top = -150
+	card.offset_bottom = 150
+	card.add_theme_stylebox_override("panel", UiKit.box(UiKit.PANEL, 22))
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	box.add_child(UiKit.label("Paused", 40, UiKit.CREAM, true))
+	var resume := UiKit.button("Keep driving", "copper")
+	resume.pressed.connect(func(): _set_paused(false))
+	box.add_child(resume)
+	_pause_sound = UiKit.button("Sound on", "panel")
+	_pause_sound.pressed.connect(func():
+		Game.toggle_sound()
+		_pause_sound.text = "Sound %s" % ("on" if Game.sound else "off")
+	)
+	box.add_child(_pause_sound)
+	var bail := UiKit.button("Pull off and bank coins", "ghost")
+	bail.pressed.connect(func():
+		_set_paused(false)
+		_bail()
+	)
+	box.add_child(bail)
+	card.add_child(box)
+	layer.add_child(card)
+	return layer
+
+
+func _set_paused(on: bool) -> void:
+	if _trail == null or not _trail.running():
+		on = false
+	_trail.set_paused(on)
+	_pause.visible = _trail.paused
+	_pause_btn.visible = not _trail.paused
+	_pause_sound.text = "Sound %s" % ("on" if Game.sound else "off")
+
+
+func _on_bumped(kind: String) -> void:
+	match kind:
+		"coin":
+			_sfx.play("coin", randf_range(0.97, 1.05))
+		"hit":
+			_sfx.play("hit")
+			_flash = 1.0
+			Input.vibrate_handheld(60)
+		"crash":
+			_sfx.play("crash")
+			_flash = 1.0
+			Input.vibrate_handheld(160)
+		"mud":
+			_sfx.play("mud")
+		"boost":
+			_sfx.play("boost")
+		"finish":
+			_sfx.play("finish")
+		"lane":
+			_sfx.play("lane", randf_range(0.9, 1.1))
+		"tick":
+			_sfx.play("tick")
+		"go":
+			_sfx.play("go")
 
 
 func _build_intro() -> PanelContainer:
@@ -327,6 +473,12 @@ func _start_run(id: String) -> void:
 	if not _trail.start(id):
 		Game.toast_emitted.emit("Finish Switchback once to open this wash.")
 		return
+	_best_before = {
+		"coins": int(Game.stats.get("best_coins", 0)),
+		"distance": int(Game.stats.get("best_distance", 0)),
+	}
+	_set_paused(false)
+	_flash = 0.0
 	_phase = "run"
 	_layout_key = ""
 	_relayout()
@@ -341,9 +493,15 @@ func _bail() -> void:
 func _on_finished(payout: Dictionary) -> void:
 	if _busy:
 		return
+	_set_paused(false)
 	var result: Dictionary = Game.apply_run(payout)
+	var best := ""
+	if int(payout.get("coins", 0)) > int(_best_before.get("coins", 0)) and int(_best_before.get("coins", 0)) > 0:
+		best = "New best haul"
+	elif int(payout.get("distance", 0)) > int(_best_before.get("distance", 0)) and int(_best_before.get("distance", 0)) > 0:
+		best = "New distance record"
 	_phase = "result"
-	_play_sheet.show_result(payout, result.get("notes", []))
+	_play_sheet.show_result(payout, result.get("notes", []), best)
 	_layout_key = ""
 	_relayout()
 
@@ -502,20 +660,34 @@ func _on_view_input(event: InputEvent) -> void:
 	if _tab == "garage":
 		_garage.handle(event)
 	elif _tab == "play" and _phase == "run":
-		var pressed := false
-		var at := Vector2.ZERO
-		if event is InputEventScreenTouch and event.pressed:
-			pressed = true
-			at = event.position
+		if _trail.paused:
+			return
+		# Swipe sideways steers the way you swipe. A tap steers toward that half.
+		# A swipe fires as soon as it travels far enough, so it never waits for the lift.
+		var swipe := maxf(36.0, _vp_host.size.x * 0.06)
+		if event is InputEventScreenTouch:
 			_touch_lane_at = Time.get_ticks_msec()
+			if event.index != 0:
+				return
+			if event.pressed:
+				_touch_down = true
+				_touch_swiped = false
+				_touch_start = event.position
+			elif _touch_down:
+				_touch_down = false
+				if not _touch_swiped:
+					_trail.nudge(-1 if _touch_start.x < _vp_host.size.x * 0.5 else 1)
+		elif event is InputEventScreenDrag:
+			if event.index == 0 and _touch_down and not _touch_swiped:
+				var dx: float = event.position.x - _touch_start.x
+				if absf(dx) >= swipe:
+					_touch_swiped = true
+					_trail.nudge(1 if dx > 0.0 else -1)
 		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			# A tap on the web page also synthesizes a mouse click. One lane change.
-			if OS.has_feature("web") and Time.get_ticks_msec() - _touch_lane_at < 450:
+			if Time.get_ticks_msec() - _touch_lane_at < 450:
 				return
-			pressed = true
-			at = event.position
-		if pressed:
-			_trail.nudge(-1 if at.x < _vp_host.size.x * 0.5 else 1)
+			_trail.nudge(-1 if event.position.x < _vp_host.size.x * 0.5 else 1)
 
 
 func _open_purchase(product_id: String) -> void:

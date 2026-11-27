@@ -26,7 +26,7 @@ func show_lobby() -> void:
 	_rebuild_lobby()
 
 
-func show_result(payout: Dictionary, notes: Array) -> void:
+func show_result(payout: Dictionary, notes: Array, best: String = "") -> void:
 	_mode = "result"
 	for child in get_children():
 		remove_child(child)
@@ -42,6 +42,8 @@ func show_result(payout: Dictionary, notes: Array) -> void:
 	elif str(payout.get("status", "")) == "bailed":
 		title = "You pulled off"
 	add_child(UiKit.label(title, 42, UiKit.CREAM, true))
+	if best != "":
+		add_child(UiKit.label(best.to_upper(), 16, UiKit.COPPER2, true))
 	var stats := HBoxContainer.new()
 	stats.add_theme_constant_override("separation", 8)
 	stats.size_flags_horizontal = Control.SIZE_EXPAND_FILL

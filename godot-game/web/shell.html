@@ -81,8 +81,24 @@ html, body {
 	image-rendering: pixelated;
 }
 
-#status-progress, #status-notice {
+#status-progress, #status-notice, #status-label {
 	display: none;
+}
+
+#status-label {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: calc(10% - 3.2rem);
+	text-align: center;
+	color: #b7b0a4;
+	font: 600 0.95rem/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+#status-label strong {
+	display: block;
+	color: #f3efe6;
+	font-size: 1.1rem;
 }
 
 #status-progress {
@@ -160,6 +176,7 @@ html, body {
 		<div id="status">
 			<img id="status-splash" class="$GODOT_SPLASH_CLASSES" alt="">
 			<progress id="status-progress"></progress>
+			<div id="status-label"><strong>Loading the bay…</strong>The first visit can take a few seconds.</div>
 			<div id="status-notice"></div>
 		</div>
 
@@ -189,6 +206,8 @@ const engine = new Engine(GODOT_CONFIG);
 	const statusOverlay = document.getElementById('status');
 	const statusProgress = document.getElementById('status-progress');
 	const statusNotice = document.getElementById('status-notice');
+	const statusLabel = document.getElementById('status-label');
+	const statusHead = statusLabel ? statusLabel.querySelector('strong') : null;
 
 	let initializing = true;
 	let statusMode = '';
@@ -204,6 +223,7 @@ const engine = new Engine(GODOT_CONFIG);
 		}
 		statusOverlay.style.visibility = 'visible';
 		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
+		if (statusLabel) statusLabel.style.display = mode === 'progress' ? 'block' : 'none';
 		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
 		statusMode = mode;
 	}
@@ -274,6 +294,10 @@ const engine = new Engine(GODOT_CONFIG);
 				if (current > 0 && total > 0) {
 					statusProgress.value = current;
 					statusProgress.max = total;
+					if (statusHead) {
+						const pct = Math.min(100, Math.floor((current / total) * 100));
+						statusHead.textContent = pct >= 100 ? 'Starting the engine…' : 'Loading the bay… ' + pct + '%';
+					}
 				} else {
 					statusProgress.removeAttribute('value');
 					statusProgress.removeAttribute('max');
